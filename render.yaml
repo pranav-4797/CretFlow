@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: certflow-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: FRONTEND_URL
+        value: https://certflow-ab935.web.app
+      - key: ALLOWED_ORIGINS
+        value: https://certflow-ab935.web.app,https://certflow-ab935.firebaseapp.com,http://localhost:5173
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FIREBASE_PROJECT_ID
+        value: certflow-ab935
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: STORAGE_PROVIDER
+        value: shared_drive
+      - key: GOOGLE_DRIVE_SHARED_DRIVE_ID
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false

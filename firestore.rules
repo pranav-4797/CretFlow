@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper Functions
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user matches the given userId
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the existing document is owned by the current user
+    function isDocOwner() {
+      return isAuthenticated() && resource != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Check if the incoming document sets the current user as owner
+    function willBeDocOwner() {
+      return isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Users Collection
+    // Stores user accounts, preferences, and organization settings
+    // ─────────────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Users can only read and modify their own profile
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Campaigns Collection
+    // Certificate generation & delivery campaigns created by organizers
+    // ─────────────────────────────────────────────────────────────────────────
+    match /campaigns/{campaignId} {
+      // Organizers can read, list, and modify only their own campaigns
+      allow read: if isDocOwner();
+      allow create: if willBeDocOwner();
+      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner();
+
+      // Subcollection: Participants in this campaign
+      match /participants/{participantId} {
+        allow read, write: if isAuthenticated() &&
+          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Templates Collection
+    // Certificate layout templates (dimensions, fonts, placeholders)
+    // ─────────────────────────────────────────────────────────────────────────
+    match /templates/{templateId} {
+      // Users can read public templates or their own private templates
+      allow read: if (resource.data.isPublic == true) ||
+                     (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if willBeDocOwner();
+      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Certificates Collection
+    // Generated certificates and verification records
+    // ─────────────────────────────────────────────────────────────────────────
+    match /certificates/{certificateId} {
+      // 1. PUBLIC VERIFICATION:
+      // Single certificate get is allowed for public verification (/verify/:id)
+      // provided the certificate is marked issued/active and not revoked.
+      // Organizers can also view their own certificates regardless of status.
+      allow get: if (isAuthenticated() && resource.data.userId == request.auth.uid) ||
+                    (resource.data.status in ['issued', 'active', 'published'] && resource.data.isRevoked != true);
+
+      // 2. LIST PROTECTION:
+      // Prevent bulk data scraping — only the issuing organizer can list their certificates.
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // 3. ORGANIZER MANAGEMENT:
+      allow create: if willBeDocOwner();
+      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Verification Logs Collection
+    // Audit logs recorded when a certificate is verified (e.g. via QR code scan)
+    // ─────────────────────────────────────────────────────────────────────────
+    match /verification_logs/{logId} {
+      // Anyone can log a verification event with required timestamp and certificateId
+      allow create: if request.resource.data.keys().hasAll(['certificateId', 'timestamp']);
+      // Only authenticated users can read audit logs
+      allow read: if isAuthenticated();
+      // Immutable log: no updates or deletions allowed from client
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Default Deny
+    // Block access to any undocumented paths
+    // ─────────────────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

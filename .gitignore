@@ -1,0 +1,114 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ─── Node / Frontend ──────────────────────────────────────────────────────────
+node_modules/
+dist/
+.output/
+.nuxt/
+.next/
+.cache/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# ─── Environment Variables ────────────────────────────────────────────────────
+# NEVER commit .env files with real credentials
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Keep example files (they have no real secrets)
+!.env.example
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Firebase ─────────────────────────────────────────────────────────────────
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+*.firebaserc.local
+# Service account & OAuth client secret keys (CRITICAL: NEVER commit)
+*firebase-adminsdk*.json
+serviceAccountKey*.json
+*service-account*.json
+client_secret*.json
+*client_secret*.json
+*credentials*.json
+
+
+# ─── Certificates & Uploads ───────────────────────────────────────────────────
+# These are stored in Cloudflare R2, not the repo
+uploads/
+certificates/
+templates/
+reports/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Desktop.ini
+$RECYCLE.BIN/
