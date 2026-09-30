@@ -38,6 +38,12 @@ services:
         value: CertFlow
       - key: GOOGLE_DRIVE_SHARED_DRIVE_ID
         value: 0ADWQx7sZb558Uk9PVA
+      - key: GOOGLE_DRIVE_CAMPAIGNS_FOLDER_ID
+        value: 1GvgzDjRxRsK92PiD7qNqCUlEttxv_TVq
+      - key: GOOGLE_DRIVE_REPORTS_FOLDER_ID
+        value: 1kBGhirabX-vZI6Wf20v3p4Hy5K7H97Tp
+      - key: GOOGLE_DRIVE_TEMPLATES_FOLDER_ID
+        value: 1fCKQJ01B2Vtu1oAfhFsTAPGgaGeOL0fY
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

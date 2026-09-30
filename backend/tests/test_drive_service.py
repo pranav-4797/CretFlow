@@ -53,104 +53,109 @@ def test_retryable_error_filter():
 
 def test_drive_service_mocked_workflow():
     """Test full Drive workflow: Shared Drive lookup, folder creation, upload, get, delete."""
-    service = GoogleDriveService()
+    from app.core.config import settings
+    with patch.object(settings, "google_drive_shared_drive_id", None), \
+         patch.object(settings, "google_drive_templates_folder_id", None), \
+         patch.object(settings, "google_drive_campaigns_folder_id", None), \
+         patch.object(settings, "google_drive_reports_folder_id", None):
+        service = GoogleDriveService()
 
-    # Mock the internal google client
-    mock_client = MagicMock()
-    service._service = mock_client
+        # Mock the internal google client
+        mock_client = MagicMock()
+        service._service = mock_client
 
-    # 1. Mock drives().list()
-    mock_client.drives().list().execute.return_value = {
-        "drives": [
-            {"id": "shared_drive_123", "name": "CertFlow"},
-            {"id": "other_drive_456", "name": "Other"},
+        # 1. Mock drives().list()
+        mock_client.drives().list().execute.return_value = {
+            "drives": [
+                {"id": "shared_drive_123", "name": "CertFlow"},
+                {"id": "other_drive_456", "name": "Other"},
+            ]
+        }
+
+        drive = service.get_shared_drive("CertFlow")
+        assert drive["id"] == "shared_drive_123"
+        assert drive["name"] == "CertFlow"
+
+        # 2. Mock folder search & creation
+        # First call: not found (empty files list)
+        mock_client.files().list().execute.return_value = {"files": []}
+        # Create call: returns created folder
+        mock_client.files().create().execute.return_value = {
+            "id": "folder_templates_123",
+            "name": "Templates",
+            "parents": ["shared_drive_123"],
+        }
+
+        folder = service.create_folder("Templates")
+        assert folder["id"] == "folder_templates_123"
+
+        # Verify supportsAllDrives=True was passed
+        create_call_kwargs = mock_client.files().create.call_args[1]
+        assert create_call_kwargs.get("supportsAllDrives") is True
+
+        # 3. Test base folder structure
+        mock_client.files().create().execute.side_effect = [
+            {"id": "id_templates", "name": "Templates"},
+            {"id": "id_campaigns", "name": "Campaigns"},
+            {"id": "id_reports", "name": "Reports"},
         ]
-    }
+        service._cached_base_folders = {}
+        base_folders = service.ensure_base_folder_structure()
+        assert "Templates" in base_folders
+        assert "Campaigns" in base_folders
+        assert "Reports" in base_folders
 
-    drive = service.get_shared_drive("CertFlow")
-    assert drive["id"] == "shared_drive_123"
-    assert drive["name"] == "CertFlow"
+        # 4. Test campaign folder structure
+        mock_client.files().create().execute.side_effect = [
+            {"id": "camp_root", "name": "c1-Hackathon"},
+            {"id": "camp_parts", "name": "participants"},
+            {"id": "camp_templ", "name": "template"},
+            {"id": "camp_certs", "name": "certificates"},
+            {"id": "camp_reps", "name": "reports"},
+        ]
+        camp_folders = service.ensure_campaign_folders("c1", "Hackathon")
+        assert camp_folders["campaign_folder_id"] == "camp_root"
+        assert camp_folders["certificates"] == "camp_certs"
 
-    # 2. Mock folder search & creation
-    # First call: not found (empty files list)
-    mock_client.files().list().execute.return_value = {"files": []}
-    # Create call: returns created folder
-    mock_client.files().create().execute.return_value = {
-        "id": "folder_templates_123",
-        "name": "Templates",
-        "parents": ["shared_drive_123"],
-    }
+        # 5. Test upload_file
+        mock_client.files().create().execute.side_effect = None
+        mock_client.files().create().execute.return_value = {
+            "id": "file_cert_999",
+            "name": "john_doe.pdf",
+            "mimeType": "application/pdf",
+            "size": "2048",
+            "webViewLink": "https://drive.google.com/file/d/file_cert_999/view",
+            "webContentLink": "https://drive.google.com/uc?id=file_cert_999",
+            "parents": ["camp_certs"],
+        }
 
-    folder = service.create_folder("Templates")
-    assert folder["id"] == "folder_templates_123"
+        upload_res = service.upload_file(
+            file_content=b"%PDF-1.4 sample content",
+            filename="john_doe.pdf",
+            mime_type="application/pdf",
+            parent_folder_id="camp_certs",
+        )
+        assert upload_res["drive_file_id"] == "file_cert_999"
+        assert upload_res["drive_web_url"] == "https://drive.google.com/file/d/file_cert_999/view"
 
-    # Verify supportsAllDrives=True was passed
-    create_call_kwargs = mock_client.files().create.call_args[1]
-    assert create_call_kwargs.get("supportsAllDrives") is True
+        # 6. Test get_file_metadata
+        mock_client.files().get().execute.return_value = {
+            "id": "file_cert_999",
+            "name": "john_doe.pdf",
+            "mimeType": "application/pdf",
+            "size": 2048,
+            "webViewLink": "https://drive.google.com/file/d/file_cert_999/view",
+            "parents": ["camp_certs"],
+        }
+        meta = service.get_file_metadata("file_cert_999")
+        assert meta["drive_file_id"] == "file_cert_999"
+        assert meta["file_name"] == "john_doe.pdf"
 
-    # 3. Test base folder structure
-    mock_client.files().create().execute.side_effect = [
-        {"id": "id_templates", "name": "Templates"},
-        {"id": "id_campaigns", "name": "Campaigns"},
-        {"id": "id_reports", "name": "Reports"},
-    ]
-    service._cached_base_folders = {}
-    base_folders = service.ensure_base_folder_structure()
-    assert "Templates" in base_folders
-    assert "Campaigns" in base_folders
-    assert "Reports" in base_folders
-
-    # 4. Test campaign folder structure
-    mock_client.files().create().execute.side_effect = [
-        {"id": "camp_root", "name": "c1-Hackathon"},
-        {"id": "camp_parts", "name": "participants"},
-        {"id": "camp_templ", "name": "template"},
-        {"id": "camp_certs", "name": "certificates"},
-        {"id": "camp_reps", "name": "reports"},
-    ]
-    camp_folders = service.ensure_campaign_folders("c1", "Hackathon")
-    assert camp_folders["campaign_folder_id"] == "camp_root"
-    assert camp_folders["certificates"] == "camp_certs"
-
-    # 5. Test upload_file
-    mock_client.files().create().execute.side_effect = None
-    mock_client.files().create().execute.return_value = {
-        "id": "file_cert_999",
-        "name": "john_doe.pdf",
-        "mimeType": "application/pdf",
-        "size": "2048",
-        "webViewLink": "https://drive.google.com/file/d/file_cert_999/view",
-        "webContentLink": "https://drive.google.com/uc?id=file_cert_999",
-        "parents": ["camp_certs"],
-    }
-
-    upload_res = service.upload_file(
-        file_content=b"%PDF-1.4 sample content",
-        filename="john_doe.pdf",
-        mime_type="application/pdf",
-        parent_folder_id="camp_certs",
-    )
-    assert upload_res["drive_file_id"] == "file_cert_999"
-    assert upload_res["drive_web_url"] == "https://drive.google.com/file/d/file_cert_999/view"
-
-    # 6. Test get_file_metadata
-    mock_client.files().get().execute.return_value = {
-        "id": "file_cert_999",
-        "name": "john_doe.pdf",
-        "mimeType": "application/pdf",
-        "size": 2048,
-        "webViewLink": "https://drive.google.com/file/d/file_cert_999/view",
-        "parents": ["camp_certs"],
-    }
-    meta = service.get_file_metadata("file_cert_999")
-    assert meta["drive_file_id"] == "file_cert_999"
-    assert meta["file_name"] == "john_doe.pdf"
-
-    # 7. Test delete_file
-    mock_client.files().delete().execute.return_value = None
-    assert service.delete_file("file_cert_999") is True
-    del_kwargs = mock_client.files().delete.call_args[1]
-    assert del_kwargs.get("supportsAllDrives") is True
+        # 7. Test delete_file
+        mock_client.files().delete().execute.return_value = None
+        assert service.delete_file("file_cert_999") is True
+        del_kwargs = mock_client.files().delete.call_args[1]
+        assert del_kwargs.get("supportsAllDrives") is True
 
 
 # ─── API Endpoint Tests ────────────────────────────────────────────────────────

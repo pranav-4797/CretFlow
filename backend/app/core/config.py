@@ -70,7 +70,10 @@ class Settings(BaseSettings):
     # ── Google Drive / Shared Drive Storage ───────────────────────────────────
     storage_provider: str = "shared_drive"  # "shared_drive", "google_drive", or "r2"
     google_drive_shared_drive_name: str = "CertFlow"
-    google_drive_shared_drive_id: Optional[str] = None
+    google_drive_shared_drive_id: Optional[str] = "0ADWQx7sZb558Uk9PVA"
+    google_drive_campaigns_folder_id: Optional[str] = "1GvgzDjRxRsK92PiD7qNqCUlEttxv_TVq"
+    google_drive_reports_folder_id: Optional[str] = "1kBGhirabX-vZI6Wf20v3p4Hy5K7H97Tp"
+    google_drive_templates_folder_id: Optional[str] = "1fCKQJ01B2Vtu1oAfhFsTAPGgaGeOL0fY"
     google_drive_folder_id: Optional[str] = None
     google_drive_service_account_path: Optional[str] = None
     google_drive_service_account_email: Optional[str] = None

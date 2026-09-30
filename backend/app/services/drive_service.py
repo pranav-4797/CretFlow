@@ -254,11 +254,28 @@ class GoogleDriveService:
         if self._cached_base_folders:
             return self._cached_base_folders
 
-        folders = ["Templates", "Campaigns", "Reports"]
         structure = {}
-        for folder_name in folders:
-            folder = self.create_folder(folder_name)
-            structure[folder_name] = folder["id"]
+
+        # Templates
+        if settings.google_drive_templates_folder_id:
+            structure["Templates"] = settings.google_drive_templates_folder_id
+        else:
+            folder = self.create_folder("Templates")
+            structure["Templates"] = folder["id"]
+
+        # Campaigns
+        if settings.google_drive_campaigns_folder_id:
+            structure["Campaigns"] = settings.google_drive_campaigns_folder_id
+        else:
+            folder = self.create_folder("Campaigns")
+            structure["Campaigns"] = folder["id"]
+
+        # Reports
+        if settings.google_drive_reports_folder_id:
+            structure["Reports"] = settings.google_drive_reports_folder_id
+        else:
+            folder = self.create_folder("Reports")
+            structure["Reports"] = folder["id"]
 
         self._cached_base_folders = structure
         return structure
