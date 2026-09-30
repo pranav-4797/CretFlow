@@ -69,8 +69,12 @@ class Settings(BaseSettings):
 
     # ── Google Drive / Shared Drive Storage ───────────────────────────────────
     storage_provider: str = "shared_drive"  # "shared_drive", "google_drive", or "r2"
+    google_drive_shared_drive_name: str = "CertFlow"
     google_drive_shared_drive_id: Optional[str] = None
     google_drive_folder_id: Optional[str] = None
+    google_drive_service_account_path: Optional[str] = None
+    google_drive_service_account_email: Optional[str] = None
+    google_drive_service_account_private_key: Optional[str] = None
 
     # ── Cloudflare R2 (Alternative Storage) ───────────────────────────────────
     r2_endpoint: str = "https://placeholder.r2.cloudflarestorage.com"
