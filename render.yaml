@@ -34,8 +34,10 @@ services:
         sync: false
       - key: STORAGE_PROVIDER
         value: shared_drive
+      - key: GOOGLE_DRIVE_SHARED_DRIVE_NAME
+        value: CertFlow
       - key: GOOGLE_DRIVE_SHARED_DRIVE_ID
-        sync: false
+        value: 0ADWQx7sZb558Uk9PVA
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
