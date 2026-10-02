@@ -156,7 +156,7 @@ class GmailService:
         Generate Google OAuth 2.0 authorization URL.
         """
         state = GmailService.generate_oauth_state(user_id)
-        effective_redirect = redirect_uri or settings.google_redirect_uri
+        effective_redirect = redirect_uri or settings.effective_gmail_redirect_uri
 
         from urllib.parse import urlencode
 
@@ -186,7 +186,7 @@ class GmailService:
         and save/update in Firestore.
         """
         user_id = GmailService.verify_and_consume_oauth_state(state)
-        effective_redirect = redirect_uri or settings.google_redirect_uri
+        effective_redirect = redirect_uri or settings.effective_gmail_redirect_uri
 
         token_url = "https://oauth2.googleapis.com/token"
         data = {
@@ -199,6 +199,11 @@ class GmailService:
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(token_url, data=data)
+            # If mismatch occurred and redirect_uri was customized, retry with default
+            if resp.status_code != 200 and redirect_uri and redirect_uri != settings.effective_gmail_redirect_uri:
+                data["redirect_uri"] = settings.effective_gmail_redirect_uri
+                resp = await client.post(token_url, data=data)
+
             if resp.status_code != 200:
                 log.error("Token exchange failed", status_code=resp.status_code, error=resp.text)
                 raise GmailAuthError("Failed to exchange authorization code with Google", code="TOKEN_EXCHANGE_FAILED")

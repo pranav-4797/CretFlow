@@ -22,6 +22,10 @@ function getAuthErrorMessage(code: string): string {
     'auth/popup-closed-by-user': 'Sign-in popup was closed. Please try again.',
     'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups and try again.',
     'auth/cancelled-popup-request': 'Sign-in was cancelled.',
+    'auth/unauthorized-domain':
+      'This domain is not authorized for Google Sign-In. Add it to Firebase Console > Authentication > Settings > Authorized Domains.',
+    'auth/operation-not-allowed':
+      'Google Sign-In is not enabled. Enable Google provider in Firebase Console > Authentication > Sign-in method.',
     'auth/account-exists-with-different-credential':
       'An account already exists with this email. Try signing in with a different method.',
   }
@@ -71,6 +75,7 @@ export default function LoginPage() {
       toast.success('Signed in successfully!', 'Welcome to CertFlow.')
       navigate(redirectTo, { replace: true })
     } catch (err: unknown) {
+      console.error('Google Sign-In failed:', err)
       const code = (err as { code?: string }).code ?? ''
       setError(getAuthErrorMessage(code))
     } finally {

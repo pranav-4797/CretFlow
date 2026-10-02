@@ -26,6 +26,10 @@ function getAuthErrorMessage(code: string): string {
     'auth/network-request-failed': 'Network error. Check your connection.',
     'auth/popup-closed-by-user': 'Google sign-up was cancelled.',
     'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups and try again.',
+    'auth/unauthorized-domain':
+      'This domain is not authorized for Google Sign-In. Add it to Firebase Console > Authentication > Settings > Authorized Domains.',
+    'auth/operation-not-allowed':
+      'Google Sign-In is not enabled. Enable Google provider in Firebase Console > Authentication > Sign-in method.',
     'auth/account-exists-with-different-credential':
       'An account already exists with this email. Try a different sign-in method.',
   }

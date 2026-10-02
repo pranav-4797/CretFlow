@@ -8,7 +8,7 @@ import re
 from typing import Any, Dict, Optional
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
@@ -61,7 +61,9 @@ async def gmail_connect(
 
 
 @router.get("/callback", summary="Gmail OAuth callback")
+@router.get("/oauth/callback", include_in_schema=False)
 async def gmail_oauth_callback(
+    request: Request,
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
@@ -93,10 +95,16 @@ async def gmail_oauth_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
+    # Determine incoming callback URL to ensure exact redirect_uri match with Google
+    callback_url = str(request.url).split("?")[0]
+    if request.headers.get("x-forwarded-proto") == "https" and callback_url.startswith("http://"):
+        callback_url = callback_url.replace("http://", "https://", 1)
+
     try:
         connection = await GmailService.exchange_code_for_tokens(
             code=code,
             state=state,
+            redirect_uri=callback_url,
         )
         google_email = quote(connection.get("google_email", ""))
         return RedirectResponse(

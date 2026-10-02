@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── URLs ──────────────────────────────────────────────────────────────────
-    frontend_url: str = "http://localhost:5173"
-    backend_url: str = "http://localhost:8000"
+    frontend_url: str = "https://certflow-ab935.web.app"
+    backend_url: str = "https://cretflow.onrender.com"
 
     @property
     def backend_host(self) -> str:
@@ -40,12 +40,24 @@ class Settings(BaseSettings):
         return urlparse(self.backend_url).netloc
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    allowed_origins: str = "http://localhost:5173"
+    allowed_origins: str = "https://certflow-ab935.web.app,https://certflow-ab935.firebaseapp.com,http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+    cors_origins: Optional[str] = None
 
     @property
     def allowed_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.allowed_origins.split(",")]
-
+        raw = self.cors_origins or self.allowed_origins
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        defaults = [
+            "https://certflow-ab935.web.app",
+            "https://certflow-ab935.firebaseapp.com",
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+        ]
+        for d in defaults:
+            if d not in origins:
+                origins.append(d)
+        return origins
 
     # ── Security ──────────────────────────────────────────────────────────────
     secret_key: str = "dev-secret-key-change-in-production-32chars!"
@@ -59,10 +71,15 @@ class Settings(BaseSettings):
     # ── Google OAuth & Gmail ──────────────────────────────────────────────────
     google_client_id: str = "placeholder.apps.googleusercontent.com"
     google_client_secret: str = "placeholder"
-    google_redirect_uri: str = "https://certflow.onrender.com/api/google/oauth/callback"
+    google_redirect_uri: str = "https://cretflow.onrender.com/api/gmail/callback"
+    gmail_redirect_uri: Optional[str] = None
     google_client_secrets_path: Optional[str] = "client_secret.json"
     gmail_scopes: str = "https://www.googleapis.com/auth/gmail.send"
     token_encryption_key: Optional[str] = None
+
+    @property
+    def effective_gmail_redirect_uri(self) -> str:
+        return self.gmail_redirect_uri or self.google_redirect_uri
 
     @property
     def gmail_scopes_list(self) -> List[str]:
