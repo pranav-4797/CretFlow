@@ -2,9 +2,12 @@
 Pydantic schemas for Gmail API integration.
 """
 
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class GmailConnectResponse(BaseModel):
@@ -25,9 +28,17 @@ class GmailDisconnectResponse(BaseModel):
 
 
 class GmailTestEmailRequest(BaseModel):
-    recipient_email: EmailStr = Field(..., description="Recipient email address for the test")
+    recipient_email: str = Field(..., description="Recipient email address for the test")
     subject: Optional[str] = Field("CertFlow Gmail Integration Test", max_length=200)
     custom_message: Optional[str] = Field(None, max_length=1000)
+
+    @field_validator("recipient_email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        clean = v.strip().lower()
+        if not EMAIL_REGEX.match(clean):
+            raise ValueError("Invalid email address format.")
+        return clean
 
 
 class GmailTestEmailResponse(BaseModel):
