@@ -115,10 +115,18 @@ export function CampaignEmailComposer({
   // Handle bulk sending
   const handleSendCampaign = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!gmailStatus?.is_connected) {
+      setFeedback({
+        success: false,
+        message: 'Your Gmail account is not connected. Please connect Gmail in Settings before dispatching.',
+      })
+      return
+    }
+
     if (!confirmSend) {
       setFeedback({
         success: false,
-        message: 'Please confirm sending before proceeding.',
+        message: 'Please check the authorization box above ("Step 2") to confirm and start sending emails.',
       })
       return
     }
@@ -504,17 +512,35 @@ export function CampaignEmailComposer({
             <span>Generated certificate PDF will be automatically retrieved from Google Shared Drive and attached to each recipient's email.</span>
           </div>
 
-          {/* Confirmation Checkbox */}
-          <div className="flex items-start gap-2 pt-1">
-            <input
-              id="confirm-send"
-              type="checkbox"
-              checked={confirmSend}
-              onChange={(e) => setConfirmSend(e.target.checked)}
-              className="mt-1 h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary"
-            />
-            <label htmlFor="confirm-send" className="text-xs text-muted-foreground cursor-pointer">
-              I explicitly confirm and authorize sending personalized certificate emails to participants in this campaign via my connected Gmail account.
+          {/* Confirmation Checkbox Box */}
+          <div
+            className={`p-3.5 rounded-lg border transition-all ${
+              confirmSend
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-100'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-100'
+            }`}
+          >
+            <label htmlFor="confirm-send" className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                id="confirm-send"
+                type="checkbox"
+                checked={confirmSend}
+                onChange={(e) => {
+                  setConfirmSend(e.target.checked)
+                  if (feedback && !feedback.success) setFeedback(null)
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold block">
+                  {confirmSend
+                    ? '✓ Authorized — Ready to Dispatch'
+                    : 'Step 2: Check Box to Authorize Sending'}
+                </span>
+                <p className="text-[11px] opacity-85 leading-snug">
+                  I explicitly confirm and authorize sending personalized certificate emails to participants in this campaign via my connected Gmail account ({gmailStatus?.google_email || 'connected Gmail'}).
+                </p>
+              </div>
             </label>
           </div>
 
@@ -540,7 +566,7 @@ export function CampaignEmailComposer({
               type="submit"
               variant="gradient"
               size="sm"
-              disabled={sending || !confirmSend || !gmailStatus?.is_connected}
+              disabled={sending}
               className="gap-1.5 text-xs"
             >
               {sending ? (
