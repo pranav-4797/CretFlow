@@ -294,9 +294,9 @@ class GoogleDriveService:
         base_structure = self.ensure_base_folder_structure()
         campaigns_root_id = base_structure["Campaigns"]
 
-        # Sanitize campaign name
+        # Sanitize campaign name for Google Drive folder
         clean_name = re.sub(r"[^\w\-_\. ]", "", campaign_name).strip()
-        folder_slug = f"{campaign_id}-{clean_name}" if clean_name else campaign_id
+        folder_slug = clean_name if clean_name else f"Campaign_{campaign_id[:8]}"
 
         # Create or get campaign main folder
         campaign_folder = self.create_folder(folder_slug, parent_id=campaigns_root_id)
