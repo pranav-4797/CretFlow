@@ -13,6 +13,7 @@ import CampaignsPage from '@/pages/CampaignsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import VerifyPage from '@/pages/VerifyPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import CreateCampaignPage from '@/pages/CreateCampaignPage'
 
 /**
  * Root application component.
@@ -70,13 +71,7 @@ export default function App() {
               path="/campaigns/new"
               element={
                 <AppLayout>
-                  {/* Phase 3: CreateCampaignPage */}
-                  <div className="page-container py-8">
-                    <h1 className="section-title">Create Campaign</h1>
-                    <p className="section-description mt-2 text-amber-600">
-                      🚧 Campaign creation is coming in Phase 3.
-                    </p>
-                  </div>
+                  <CreateCampaignPage />
                 </AppLayout>
               }
             />
