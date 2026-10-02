@@ -50,13 +50,24 @@ def _render_template(template: str, variables: Dict[str, Any], escape_html: bool
 
 @router.get("/connect", response_model=GmailConnectResponse, summary="Initiate Gmail OAuth flow")
 async def gmail_connect(
+    request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
     Generate a cryptographically secure, signed OAuth state and return
     the Google OAuth 2.0 authorization URL.
     """
-    auth_url = GmailService.get_authorization_url(user_id=current_user.uid)
+    backend_base = str(request.base_url).rstrip("/")
+    if request.headers.get("x-forwarded-proto") == "https" and backend_base.startswith("http://"):
+        backend_base = backend_base.replace("http://", "https://", 1)
+
+    # If running locally, default to the local callback URL; otherwise use production redirect URI
+    if "localhost" in backend_base or "127.0.0.1" in backend_base:
+        redirect_uri = f"{backend_base}/api/gmail/callback"
+    else:
+        redirect_uri = settings.effective_gmail_redirect_uri
+
+    auth_url = GmailService.get_authorization_url(user_id=current_user.uid, redirect_uri=redirect_uri)
     return GmailConnectResponse(authorization_url=auth_url)
 
 
