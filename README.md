@@ -121,4 +121,4 @@ Because emails are sent through official Google accounts to guarantee primary in
 
 ---
 
-Developed with ❤️ for event organizers and academic institutions.
+Developed by ❤️ Pranav Chopade
