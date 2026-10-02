@@ -66,6 +66,9 @@ async def gmail_connect(
         redirect_uri = f"{backend_base}/api/gmail/callback"
     else:
         redirect_uri = settings.effective_gmail_redirect_uri
+        # Safeguard: if backend is deployed (e.g. Render) but env variable was set to localhost
+        if "localhost" in redirect_uri or "127.0.0.1" in redirect_uri:
+            redirect_uri = f"{backend_base}/api/gmail/callback"
 
     auth_url = GmailService.get_authorization_url(user_id=current_user.uid, redirect_uri=redirect_uri)
     return GmailConnectResponse(authorization_url=auth_url)
@@ -87,6 +90,8 @@ async def gmail_oauth_callback(
     - Redirect user back to CertFlow settings
     """
     frontend_base = settings.frontend_url.rstrip("/")
+    if ("onrender.com" in str(request.base_url) or settings.is_production) and ("localhost" in frontend_base or "127.0.0.1" in frontend_base):
+        frontend_base = "https://certflow-ab935.web.app"
 
     from urllib.parse import quote
 
