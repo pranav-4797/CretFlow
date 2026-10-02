@@ -53,7 +53,16 @@ async def provision_campaign_folders(
       ├── template/
       ├── certificates/
       └── reports/
+    Enforces strict IDOR protection — campaign must be owned by current_user.
     """
+    from app.services.firestore_service import firestore_service
+    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    if not camp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied.",
+        )
+
     try:
         folder_map = drive_service.ensure_campaign_folders(
             campaign_id=campaign_id,
@@ -72,7 +81,9 @@ async def provision_campaign_folders(
 
 
 @router.get("/test-drive", summary="Execute automated integration test for Google Shared Drive")
-async def test_drive_integration() -> Dict[str, Any]:
+async def test_drive_integration(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> Dict[str, Any]:
     """
     Automated integration check for Google Shared Drive:
     1. Authenticates service account

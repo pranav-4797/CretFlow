@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
+import { GmailConnectionCard } from '@/components/gmail/GmailConnectionCard'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -16,10 +17,15 @@ export default function SettingsPage() {
           <Settings className="h-6 w-6 text-primary" />
           Settings
         </h1>
-        <p className="section-description">Manage your account preferences.</p>
+        <p className="section-description">Manage your account preferences and integrations.</p>
       </motion.div>
 
       <div className="mt-8 space-y-6">
+        {/* Gmail OAuth Integration */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <GmailConnectionCard />
+        </motion.div>
+
         {/* Profile */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card>

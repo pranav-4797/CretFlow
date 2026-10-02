@@ -320,21 +320,31 @@ class GoogleDriveService:
     def upload_file(
         self,
         file_content: Union[bytes, BinaryIO],
-        filename: str,
-        mime_type: str,
-        parent_folder_id: str,
+        filename: Optional[str] = None,
+        mime_type: str = "application/octet-stream",
+        parent_folder_id: Optional[str] = None,
         description: Optional[str] = None,
+        file_name: Optional[str] = None,
+        folder_id: Optional[str] = None,
     ) -> Dict[str, Union[str, int]]:
         """
         Upload a file to a specific folder in the Shared Drive.
         Accepts raw bytes or a file-like binary stream.
+        Supports both filename/file_name and parent_folder_id/folder_id.
         """
+        effective_name = filename or file_name or "uploaded_file"
+        effective_folder = parent_folder_id or folder_id
+        if not effective_folder:
+            raise ValueError("Target folder ID (parent_folder_id or folder_id) must be specified.")
+
+        # Sanitize filename (prevent path traversal characters like ../ or control chars)
+        safe_name = os.path.basename(effective_name).replace("\r", "").replace("\n", "")
+
         if isinstance(file_content, bytes):
             stream = io.BytesIO(file_content)
             content_size = len(file_content)
         else:
             stream = file_content
-            # Try to determine size if possible
             try:
                 curr = stream.tell()
                 stream.seek(0, io.SEEK_END)
@@ -344,11 +354,11 @@ class GoogleDriveService:
                 content_size = 0
 
         file_metadata = {
-            "name": filename,
-            "parents": [parent_folder_id],
+            "name": safe_name,
+            "parents": [effective_folder],
         }
         if description:
-            file_metadata["description"] = description
+            file_metadata["description"] = description[:1000]
 
         media = MediaIoBaseUpload(stream, mimetype=mime_type, resumable=False)
 

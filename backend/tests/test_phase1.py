@@ -86,8 +86,9 @@ async def test_campaigns_requires_auth(client: AsyncClient):
 async def test_gmail_callback_public(client: AsyncClient):
     """Gmail callback should be accessible without auth (OAuth flow)."""
     response = await client.get("/api/gmail/callback")
-    # Should return 501 (not implemented), NOT 401
-    assert response.status_code == status.HTTP_501_NOT_IMPLEMENTED
+    # Should return 302 redirect to frontend with error or 501, NOT 401
+    assert response.status_code in (status.HTTP_302_FOUND, status.HTTP_501_NOT_IMPLEMENTED)
+    assert response.status_code != status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.anyio

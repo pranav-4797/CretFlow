@@ -46,11 +46,6 @@ class Settings(BaseSettings):
     def allowed_origins_list(self) -> List[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
 
-    # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/certflow"
-
-    # ── Redis ─────────────────────────────────────────────────────────────────
-    redis_url: str = "redis://localhost:6379"
 
     # ── Security ──────────────────────────────────────────────────────────────
     secret_key: str = "dev-secret-key-change-in-production-32chars!"
@@ -61,11 +56,21 @@ class Settings(BaseSettings):
     firebase_private_key: str = "placeholder"
     firebase_credentials_path: Optional[str] = None
 
-    # ── Google OAuth ──────────────────────────────────────────────────────────
+    # ── Google OAuth & Gmail ──────────────────────────────────────────────────
     google_client_id: str = "placeholder.apps.googleusercontent.com"
     google_client_secret: str = "placeholder"
-    google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
+    google_redirect_uri: str = "https://certflow.onrender.com/api/google/oauth/callback"
     google_client_secrets_path: Optional[str] = "client_secret.json"
+    gmail_scopes: str = "https://www.googleapis.com/auth/gmail.send"
+    token_encryption_key: Optional[str] = None
+
+    @property
+    def gmail_scopes_list(self) -> List[str]:
+        scopes = [s.strip() for s in self.gmail_scopes.split(",") if s.strip()]
+        for required in ("openid", "https://www.googleapis.com/auth/userinfo.email"):
+            if required not in scopes:
+                scopes.append(required)
+        return scopes
 
     # ── Google Drive / Shared Drive Storage ───────────────────────────────────
     storage_provider: str = "shared_drive"  # "shared_drive", "google_drive", or "r2"

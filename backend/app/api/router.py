@@ -29,6 +29,15 @@ api_router.include_router(certificates.router, prefix="/certificates", tags=["Ce
 
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 api_router.include_router(gmail.router, prefix="/gmail", tags=["Gmail"])
+# Google OAuth callback alias for registered Google Cloud redirect URI
+api_router.add_api_route(
+    "/google/oauth/callback",
+    gmail.gmail_oauth_callback,
+    methods=["GET"],
+    tags=["Gmail"],
+    include_in_schema=True,
+    summary="Google OAuth 2.0 callback alias",
+)
 
 # ── Emails ────────────────────────────────────────────────────────────────────
 api_router.include_router(emails.router, prefix="/emails", tags=["Emails"])

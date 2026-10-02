@@ -106,6 +106,22 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Gmail Connections (OAuth refresh tokens encrypted at rest)
+    // NEVER accessible from client SDKs; managed exclusively by Backend Firebase Admin SDK
+    // ─────────────────────────────────────────────────────────────────────────
+    match /gmail_connections/{userId} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Email Jobs (Authoritative batch processing states and atomic worker leases)
+    // Managed exclusively by Backend Firebase Admin SDK
+    // ─────────────────────────────────────────────────────────────────────────
+    match /email_jobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Default Deny
     // Block access to any undocumented paths
     // ─────────────────────────────────────────────────────────────────────────

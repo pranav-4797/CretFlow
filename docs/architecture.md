@@ -1,4 +1,4 @@
-# CertFlow Architecture — Phase 1 Foundation
+# CertFlow Architecture — Firestore-Backed Free-Tier Batch Engine
 
 ## System Architecture
 
@@ -13,141 +13,60 @@
                     ┌──────────────▼──────────────────────┐
                     │       Firebase Hosting               │
                     │   (Frontend static hosting)          │
+                    │   https://certflow-ab935.web.app     │
                     └──────────────┬──────────────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
               │                    │                    │
-    ┌─────────▼────────┐  ┌────────▼───────┐  ┌────────▼────────┐
-    │ Firebase Auth    │  │ FastAPI Backend │  │ Cloudflare R2   │
-    │ (Authentication) │  │ (Render)        │  │ (File Storage)  │
-    └─────────┬────────┘  └────────┬───────┘  └────────┬────────┘
-              │                    │                    │
-              │           ┌────────▼───────┐           │
-              │           │ Neon PostgreSQL │           │
-              │           │ (Database)      │           │
-              │           └────────────────┘           │
-              │                    │                    │
-              │           ┌────────▼───────┐           │
-              │           │ Celery Worker   │◄──────────┘
-              │           │ (Render)        │
-              │           └────────┬───────┘
-              │                    │
-              │           ┌────────▼───────┐
-              │           │ Upstash Redis   │
-              │           │ (Task Queue)    │
-              │           └────────────────┘
-              │
-    ┌─────────▼────────┐
-    │   Gmail API      │
-    │ (Email Delivery) │
-    └──────────────────┘
+    ┌─────────▼────────┐  ┌────────▼────────────────┐  ┌▼──────────────────┐
+    │ Firebase Auth    │  │ FastAPI Backend         │  │ Google Shared Drive│
+    │ (Authentication) │  │ (Render Free Web Svc)   │  │ (Certificate PDFs) │
+    └──────────────────┘  │ https://certflow.onrender│ └───────────────────┘
+                          └────────┬────────────────┘
+                                   │
+                          ┌────────▼────────────────┐
+                          │   Firebase Firestore    │
+                          │   (Sole Database &      │
+                          │    Batch Job State Store│
+                          │    - campaigns          │
+                          │    - participants       │
+                          │    - email_jobs         │
+                          │    - gmail_connections) │
+                          └────────┬────────────────┘
+                                   │
+                          ┌────────▼────────────────┐
+                          │   Official Gmail API    │
+                          │   (users.messages.send) │
+                          └─────────────────────────┘
 ```
 
-## Frontend Structure
-
-```
-frontend/src/
-├── components/
-│   ├── ui/               # shadcn/ui base components
-│   │   ├── button.tsx
-│   │   ├── card.tsx
-│   │   ├── input.tsx
-│   │   ├── label.tsx
-│   │   ├── progress.tsx
-│   │   ├── separator.tsx
-│   │   ├── toast.tsx
-│   │   └── toaster.tsx
-│   ├── layout/
-│   │   └── AppLayout.tsx  # Sidebar layout for authenticated pages
-│   └── routing/
-│       └── ProtectedRoute.tsx  # Auth guards
-├── contexts/
-│   └── AuthContext.tsx    # Firebase auth context
-├── hooks/
-│   └── use-toast.ts       # Toast notification hook
-├── lib/
-│   └── utils.ts           # Shared utilities (cn, formatDate, etc.)
-├── pages/
-│   ├── LandingPage.tsx    # Marketing page
-│   ├── LoginPage.tsx      # Sign in
-│   ├── SignupPage.tsx     # Sign up
-│   ├── DashboardPage.tsx  # Main dashboard
-│   ├── CampaignsPage.tsx  # Campaign list
-│   ├── SettingsPage.tsx   # User settings
-│   ├── VerifyPage.tsx     # Certificate verification (public)
-│   └── NotFoundPage.tsx   # 404
-├── services/
-│   └── api.ts             # API client with auth token injection
-├── types/
-│   └── index.ts           # TypeScript domain types
-└── test/
-    ├── setup.ts           # Vitest setup + mocks
-    └── phase1.test.tsx    # Phase 1 tests
-```
-
-## Backend Structure
+## Backend Services Structure
 
 ```
 backend/
-├── main.py                # FastAPI application factory
+├── main.py                          # FastAPI application factory & lifespan
 ├── app/
 │   ├── core/
-│   │   ├── config.py      # Pydantic settings (env vars)
-│   │   ├── database.py    # SQLAlchemy engine & session
-│   │   ├── firebase.py    # Firebase Admin initialization
-│   │   ├── logging.py     # structlog configuration
-│   │   └── security.py   # get_current_user dependency
-│   └── api/
-│       ├── router.py      # Central API router
-│       └── endpoints/
-│           ├── auth.py     # /api/auth
-│           ├── campaigns.py # /api/campaigns
-│           ├── participants.py # /api/participants
-│           ├── templates.py # /api/templates
-│           ├── certificates.py # /api/certificates
-│           ├── gmail.py    # /api/gmail
-│           ├── emails.py   # /api/emails
-│           └── reports.py  # /api/reports
-├── worker/
-│   ├── celery_app.py      # Celery configuration
-│   └── tasks/
-│       ├── certificates.py # Certificate generation tasks
-│       └── emails.py       # Email sending tasks
-└── tests/
-    └── test_phase1.py     # Phase 1 backend tests
+│   │   ├── config.py                # Pydantic settings (env vars)
+│   │   ├── firebase.py              # Firebase Admin SDK initialization
+│   │   ├── logging.py               # structlog structured JSON logging
+│   │   ├── security.py              # Firebase Auth ID token verification
+│   │   └── encryption.py            # Fernet AES token encryption
+│   ├── services/
+│   │   ├── firestore_service.py     # Firestore repository (Campaigns, Jobs, Leases, Tokens)
+│   │   ├── batch_engine.py          # In-process batch engine (10–25 batch, 1–3 concurrency)
+│   │   ├── reconciler.py            # Startup recovery & lease reconciliation
+│   │   ├── drive_service.py         # Google Shared Drive API v3 operations
+│   │   ├── certificate_service.py   # PDF certificate rendering & Drive upload
+│   │   └── gmail_service.py         # Gmail OAuth 2.0 & users.messages.send
+│   ├── schemas/                     # Pydantic validation schemas
+│   └── api/                         # REST endpoints (auth, campaigns, emails, gmail, storage)
 ```
 
-## API Endpoints (Phase 1 Status)
+## Core Design Principles
 
-| Endpoint | Method | Status | Notes |
-|----------|--------|--------|-------|
-| `/health` | GET | ✅ | Public health check |
-| `/api/docs` | GET | ✅ | Swagger UI |
-| `/api/auth/status` | GET | ✅ | Firebase config status |
-| `/api/auth/me` | GET | 🔒 | Requires Firebase auth (Phase 2) |
-| `/api/campaigns/*` | * | 🚧 | Phase 3 |
-| `/api/participants/*` | * | 🚧 | Phase 4 |
-| `/api/templates/*` | * | 🚧 | Phase 5 |
-| `/api/certificates/*` | * | 🚧 | Phase 6 |
-| `/api/gmail/*` | * | 🚧 | Phase 8 |
-| `/api/emails/*` | * | 🚧 | Phase 10 |
-| `/api/reports/*` | * | 🚧 | Phase 11 |
-
-## Security Model
-
-- Firebase ID tokens are verified server-side for every protected request
-- Users can only access their own data (owner checks added in Phase 3)
-- Gmail OAuth 2.0 — refresh tokens stored encrypted in database
-- Files stored in R2 with secure keys — never on Render filesystem
-- CORS restricted to known frontend origins
-
-## Development vs Production
-
-| Config | Development | Production |
-|--------|------------|-----------|
-| Database | Local PostgreSQL | Neon PostgreSQL |
-| Redis | Local Redis | Upstash Redis |
-| Storage | R2 dev bucket | R2 prod bucket |
-| Logging | Colored console | JSON (log aggregation) |
-| CORS | All localhost | Specific domain |
-| Trusted Hosts | Disabled | Backend hostname |
+1. **Free-Tier Compatibility:** Operates completely inside a single free-tier Render Web Service and Firebase Free Spark plan without paid add-ons.
+2. **Resumable Batching:** Bulk certificate sending is broken into small batches (default 15 recipients). Each recipient's state is stored in Firestore (`queued`, `processing`, `sent`, `retrying`, `failed`, `unknown`, `cancelled`).
+3. **Atomic Leases & Dual-Process Protection:** Background workers acquire time-limited Firestore job leases (`lease_expires_at`). Competing workers cannot process the same job or participants.
+4. **Render Sleep Recovery:** If the free Render service spins down during inactivity, `RestartReconciler` detects expired leases upon wake-up/activity and resets stuck recipients for seamless resumption.
+5. **Zero Redis & Neon:** Upstash Redis, Celery background workers, Neon PostgreSQL, and SQLAlchemy ORM have been completely excised.

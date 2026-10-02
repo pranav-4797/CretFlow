@@ -9,6 +9,8 @@ from httpx import AsyncClient, ASGITransport
 from fastapi import status
 
 from main import app
+from app.core.config import settings
+from app.core.security import AuthenticatedUser, get_current_user
 from app.services.drive_service import GoogleDriveService, is_retryable_error
 from googleapiclient.errors import HttpError
 from httplib2 import Response
@@ -163,26 +165,38 @@ def test_drive_service_mocked_workflow():
 @pytest.mark.anyio
 async def test_storage_info_endpoint(client: AsyncClient):
     """Test public storage info endpoint."""
-    response = await client.get("/api/storage/info")
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data["storage_provider"] == "shared_drive"
-    assert data["shared_drive_name"] == "CertFlow"
-    assert data["service_account_configured"] is True
+    with patch.object(settings, "google_drive_service_account_email", "service-account@certflow.iam.gserviceaccount.com"):
+        response = await client.get("/api/storage/info")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["storage_provider"] == "shared_drive"
+        assert data["shared_drive_name"] == "CertFlow"
+        assert data["service_account_configured"] is True
+
+
+@pytest.mark.anyio
+async def test_storage_test_drive_endpoint_requires_auth(client: AsyncClient):
+    """Diagnostic /api/storage/test-drive endpoint must reject unauthenticated requests."""
+    response = await client.get("/api/storage/test-drive")
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.anyio
 async def test_storage_test_drive_endpoint_response_structure(client: AsyncClient):
     """
-    Test diagnostic /api/storage/test-drive endpoint returns structured JSON report.
-    Even if Google Drive API is not yet enabled in the cloud project,
-    the endpoint handles the error gracefully and outputs diagnostic troubleshooting info.
+    Test diagnostic /api/storage/test-drive endpoint returns structured JSON report
+    when called by an authenticated user.
     """
-    response = await client.get("/api/storage/test-drive")
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert "service_account_authentication" in data
-    assert "all_passed" in data
-    assert "details" in data
-    # Service account itself is authenticated locally
-    assert data["service_account_authentication"] == "passed"
+    mock_user = AuthenticatedUser(uid="user_drive_test_123", email="tester@example.com")
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await client.get("/api/storage/test-drive")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "service_account_authentication" in data
+        assert "all_passed" in data
+        assert "details" in data
+        assert data["service_account_authentication"] == "passed"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
