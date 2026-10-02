@@ -5,7 +5,7 @@ Add new resource routers here as new phases are implemented.
 
 from fastapi import APIRouter
 
-from app.api.endpoints import auth, campaigns, participants, templates, certificates, gmail, emails, reports, storage
+from app.api.endpoints import auth, campaigns, participants, templates, certificates, gmail, emails, reports, storage, webhooks
 
 api_router = APIRouter()
 
@@ -44,3 +44,6 @@ api_router.include_router(emails.router, prefix="/emails", tags=["Emails"])
 
 # ── Reports ───────────────────────────────────────────────────────────────────
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
+
+# ── Webhooks & Automations ───────────────────────────────────────────────────
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])

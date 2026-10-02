@@ -12,12 +12,14 @@ import {
   Send,
   Loader2,
   Award,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { CampaignEmailComposer } from '@/components/gmail/CampaignEmailComposer'
 import { CertificateStudio } from '@/components/certificates/CertificateStudio'
+import { GoogleFormsIntegration } from '@/components/campaigns/GoogleFormsIntegration'
 import { api } from '@/services/api'
 
 interface Campaign {
@@ -33,7 +35,7 @@ interface Campaign {
 }
 
 export default function CampaignsPage() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'certificate_studio' | 'email_distributor'>('campaigns')
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'certificate_studio' | 'email_distributor' | 'google_forms'>('campaigns')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('')
@@ -72,6 +74,12 @@ export default function CampaignsPage() {
     setActiveTab('certificate_studio')
   }
 
+  const handleOpenForms = (campaign: Campaign) => {
+    setSelectedCampaignId(campaign.id || campaign.campaign_id)
+    setSelectedCampaignName(campaign.name || campaign.campaign_name)
+    setActiveTab('google_forms')
+  }
+
   return (
     <div className="page-container py-8 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -104,6 +112,17 @@ export default function CampaignsPage() {
             >
               <Award className="h-3.5 w-3.5" />
               Certificate Studio
+            </button>
+            <button
+              onClick={() => setActiveTab('google_forms')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+                activeTab === 'google_forms'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ClipboardCheck className="h-3.5 w-3.5 text-indigo-500" />
+              Forms Quiz
             </button>
             <button
               onClick={() => setActiveTab('email_distributor')}
@@ -171,20 +190,29 @@ export default function CampaignsPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full gap-1.5 text-xs"
+                          className="w-full gap-1 text-[11px] px-1.5"
                           onClick={() => handleOpenStudio(camp)}
                         >
                           <Award className="h-3.5 w-3.5 text-primary" />
-                          Design Certificate
+                          Design
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-1 text-[11px] px-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                          onClick={() => handleOpenForms(camp)}
+                        >
+                          <ClipboardCheck className="h-3.5 w-3.5 text-indigo-500" />
+                          Forms Quiz
                         </Button>
                         <Button
                           variant="gradient"
                           size="sm"
-                          className="w-full gap-1.5 text-xs"
+                          className="w-full gap-1 text-[11px] px-1.5"
                           onClick={() => handleOpenDistributor(camp)}
                         >
                           <Send className="h-3.5 w-3.5" />
@@ -232,6 +260,13 @@ export default function CampaignsPage() {
             campaignId={selectedCampaignId || 'default_campaign'}
             campaignName={selectedCampaignName || 'Certificate Campaign'}
             onSwitchToEmail={() => setActiveTab('email_distributor')}
+          />
+        </motion.div>
+      ) : activeTab === 'google_forms' ? (
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <GoogleFormsIntegration
+            campaignId={selectedCampaignId || 'default_campaign'}
+            campaignName={selectedCampaignName || 'Certificate Campaign'}
           />
         </motion.div>
       ) : (
