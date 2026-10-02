@@ -96,7 +96,7 @@ async def generate_certificates(
             web_link = None
             try:
                 drive_res = drive_service.upload_file(
-                    file_bytes=pdf_bytes,
+                    file_content=pdf_bytes,
                     filename=pdf_filename,
                     parent_folder_id=cert_folder_id,
                     mime_type="application/pdf",

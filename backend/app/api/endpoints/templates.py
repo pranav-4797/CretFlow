@@ -82,7 +82,7 @@ async def upload_template(
         folders = drive_service.ensure_campaign_folders(campaign_id, campaign.get("campaign_name", "Campaign"))
         template_folder_id = folders.get("template")
         drive_res = drive_service.upload_file(
-            file_bytes=file_bytes,
+            file_content=file_bytes,
             filename=f"template_{campaign_id}_{file.filename}",
             parent_folder_id=template_folder_id,
             mime_type=file.content_type or "image/png",

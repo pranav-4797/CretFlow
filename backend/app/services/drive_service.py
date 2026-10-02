@@ -319,19 +319,24 @@ class GoogleDriveService:
     @retry_drive_call
     def upload_file(
         self,
-        file_content: Union[bytes, BinaryIO],
+        file_content: Optional[Union[bytes, BinaryIO]] = None,
         filename: Optional[str] = None,
         mime_type: str = "application/octet-stream",
         parent_folder_id: Optional[str] = None,
         description: Optional[str] = None,
         file_name: Optional[str] = None,
         folder_id: Optional[str] = None,
+        file_bytes: Optional[Union[bytes, BinaryIO]] = None,
     ) -> Dict[str, Union[str, int]]:
         """
         Upload a file to a specific folder in the Shared Drive.
         Accepts raw bytes or a file-like binary stream.
-        Supports both filename/file_name and parent_folder_id/folder_id.
+        Supports both filename/file_name, parent_folder_id/folder_id, and file_content/file_bytes.
         """
+        effective_content = file_content if file_content is not None else file_bytes
+        if effective_content is None:
+            raise ValueError("File content (file_content or file_bytes) must be provided.")
+
         effective_name = filename or file_name or "uploaded_file"
         effective_folder = parent_folder_id or folder_id
         if not effective_folder:
@@ -340,11 +345,11 @@ class GoogleDriveService:
         # Sanitize filename (prevent path traversal characters like ../ or control chars)
         safe_name = os.path.basename(effective_name).replace("\r", "").replace("\n", "")
 
-        if isinstance(file_content, bytes):
-            stream = io.BytesIO(file_content)
-            content_size = len(file_content)
+        if isinstance(effective_content, bytes):
+            stream = io.BytesIO(effective_content)
+            content_size = len(effective_content)
         else:
-            stream = file_content
+            stream = effective_content
             try:
                 curr = stream.tell()
                 stream.seek(0, io.SEEK_END)
