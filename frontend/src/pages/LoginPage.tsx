@@ -11,6 +11,7 @@ import { toast } from '@/hooks/use-toast'
 
 /** Map Firebase error codes to user-friendly messages */
 function getAuthErrorMessage(code: string): string {
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'current domain'
   const messages: Record<string, string> = {
     'auth/invalid-email': 'Invalid email address.',
     'auth/user-not-found': 'No account found with this email.',
@@ -23,9 +24,11 @@ function getAuthErrorMessage(code: string): string {
     'auth/popup-blocked': 'Popup was blocked by your browser. Allow popups and try again.',
     'auth/cancelled-popup-request': 'Sign-in was cancelled.',
     'auth/unauthorized-domain':
-      'This domain is not authorized for Google Sign-In. Add it to Firebase Console > Authentication > Settings > Authorized Domains.',
+      currentHost === '127.0.0.1'
+        ? 'Domain "127.0.0.1" is not authorized. Please open http://localhost:5173 instead, or click "Add domain" in Firebase Console and add "127.0.0.1".'
+        : `Domain "${currentHost}" is not authorized. Please click "Add domain" in Firebase Console > Authentication > Settings > Authorised domains and enter "${currentHost}".`,
     'auth/operation-not-allowed':
-      'Google Sign-In is not enabled. Enable Google provider in Firebase Console > Authentication > Sign-in method.',
+      'Google Sign-In is not enabled. Go to Firebase Console > Authentication > Sign-in method, click Google, and enable it.',
     'auth/account-exists-with-different-credential':
       'An account already exists with this email. Try signing in with a different method.',
   }
