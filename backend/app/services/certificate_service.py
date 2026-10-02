@@ -1,172 +1,222 @@
 """
-Certificate Generation Service for CertFlow.
-Renders certificates locally and uploads them to Google Shared Drive.
-Completely standalone — zero Celery or Redis dependencies.
+Certificate Generation Service.
+
+Responsible for:
+- Loading certificate background templates (PNG, JPG)
+- Rendering participant names and certificate details using bundled Google Fonts
+- Supporting precision positioning (percentage-based X, Y for responsive coordinates)
+- Generating high-resolution PDFs
+- Integrating with Google Shared Drive to store and link certificate PDFs
 """
 
-from datetime import datetime, timezone
+import base64
+import io
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
-import tempfile
-from typing import Any, Dict, Optional
-import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
+from PIL import Image, ImageDraw, ImageFont
+
+from app.core.config import settings
 from app.services.drive_service import drive_service
+from app.services.firestore_service import firestore_service
 
 log = structlog.get_logger(__name__)
 
+# Available bundled fonts directory
+FONTS_DIR = Path(__file__).parent.parent / "assets" / "fonts"
 
-def create_sample_certificate_pdf(
-    participant_name: str,
-    event_title: str,
-    output_path: str,
-    issue_date: Optional[str] = None,
-) -> str:
-    """
-    Generates a PDF certificate file locally for upload.
-    Uses reportlab if available, or creates a standard valid PDF structure.
-    """
-    date_str = issue_date or datetime.now(timezone.utc).strftime("%B %d, %Y")
+AVAILABLE_FONTS = {
+    "GreatVibes": "GreatVibes.ttf",          # Calligraphy / Script
+    "PlayfairDisplay": "PlayfairDisplay.ttf",  # Classic / Luxury Serif
+    "Cinzel": "Cinzel.ttf",                  # Academic / Roman Classical
+    "Montserrat": "Montserrat.ttf",          # Clean Modern Sans
+    "AlexBrush": "AlexBrush.ttf",            # Elegant Cursive Signature
+}
 
+DEFAULT_FONT = "PlayfairDisplay"
+
+
+def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
+    """Convert hex string (e.g. #1e293b or 1e293b) to RGB tuple."""
+    hex_clean = hex_color.lstrip("#")
+    if len(hex_clean) == 3:
+        hex_clean = "".join([c * 2 for c in hex_clean])
+    if len(hex_clean) != 6:
+        return (30, 41, 59)
     try:
-        from reportlab.lib.pagesizes import letter, landscape
-        from reportlab.pdfgen import canvas
-
-        c = canvas.Canvas(output_path, pagesize=landscape(letter))
-        width, height = landscape(letter)
-
-        # Background frame
-        c.setStrokeColorRGB(0.2, 0.4, 0.8)
-        c.setLineWidth(4)
-        c.rect(20, 20, width - 40, height - 40)
-
-        # Inner frame
-        c.setStrokeColorRGB(0.7, 0.8, 0.9)
-        c.setLineWidth(1)
-        c.rect(28, 28, width - 56, height - 56)
-
-        # Header
-        c.setFillColorRGB(0.1, 0.2, 0.5)
-        c.setFont("Helvetica-Bold", 30)
-        c.drawCentredString(width / 2.0, height - 110, "CERTIFICATE OF ACHIEVEMENT")
-
-        # Subtitle
-        c.setFillColorRGB(0.3, 0.3, 0.3)
-        c.setFont("Helvetica", 14)
-        c.drawCentredString(width / 2.0, height - 160, "This is proudly presented to")
-
-        # Participant Name
-        c.setFillColorRGB(0.05, 0.1, 0.3)
-        c.setFont("Helvetica-Bold", 26)
-        c.drawCentredString(width / 2.0, height - 220, participant_name)
-
-        # Description
-        c.setFillColorRGB(0.25, 0.25, 0.25)
-        c.setFont("Helvetica", 13)
-        c.drawCentredString(
-            width / 2.0,
-            height - 270,
-            f"for successful participation in and completion of {event_title}",
-        )
-
-        # Date & Verification Tag
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(0.4, 0.4, 0.4)
-        c.drawCentredString(width / 2.0, 90, f"Issued on {date_str}")
-
-        c.setFont("Helvetica-Oblique", 9)
-        c.setFillColorRGB(0.5, 0.5, 0.5)
-        c.drawCentredString(width / 2.0, 45, "Verified & issued via CertFlow Platform")
-
-        c.save()
-        return output_path
-    except ImportError:
-        # Fallback simple valid PDF structure if reportlab is not installed
-        content = (
-            f"%PDF-1.4\n"
-            f"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
-            f"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
-            f"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj\n"
-            f"% CertFlow Certificate for {participant_name} - {event_title}\n"
-            f"xref\n0 4\n0000000000 65535 f \n0000000010 00000 n \n0000000053 00000 n \n0000000102 00000 n \n"
-            f"trailer << /Size 4 /Root 1 0 R >>\nstartxref\n178\n%%EOF\n"
-        )
-        with open(output_path, "wb") as f:
-            f.write(content.encode("utf-8"))
-        return output_path
+        return tuple(int(hex_clean[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore
+    except ValueError:
+        return (30, 41, 59)
 
 
 class CertificateService:
-    """Service for generating certificates and saving them to Google Shared Drive."""
+    """Core certificate generation engine using Pillow and ReportLab/PDF."""
 
-    @staticmethod
-    def generate_and_upload_certificate(
-        participant_id: str,
-        campaign_id: str,
-        campaign_name: str = "General",
-        participant_name: str = "Participant",
-        participant_email: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    @classmethod
+    def get_font_path(cls, font_family: str) -> Optional[Path]:
+        """Resolve font file path from bundled fonts."""
+        filename = AVAILABLE_FONTS.get(font_family, AVAILABLE_FONTS.get(DEFAULT_FONT))
+        if filename:
+            path = FONTS_DIR / filename
+            if path.exists():
+                return path
+        # Fallback to any TTF in fonts dir
+        if FONTS_DIR.exists():
+            for p in FONTS_DIR.glob("*.ttf"):
+                return p
+        return None
+
+    @classmethod
+    def load_font(cls, font_family: str, size: int) -> ImageFont.FreeTypeFont:
+        """Load truetype font or fall back gracefully."""
+        font_path = cls.get_font_path(font_family)
+        if font_path and font_path.exists():
+            try:
+                return ImageFont.truetype(str(font_path), size)
+            except Exception as e:
+                log.warning("Failed to load TrueType font, using default", error=str(e), font_family=font_family)
+        return ImageFont.load_default()
+
+    @classmethod
+    def render_certificate_image(
+        cls,
+        template_bytes: bytes,
+        participant_name: str,
+        config: Dict[str, Any],
+        certificate_id: Optional[str] = None,
+        event_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+    ) -> Image.Image:
         """
-        Generates a certificate PDF locally and uploads it to the campaign's Shared Drive folder.
-        Returns file metadata for Firestore persistence.
+        Draw participant name and metadata onto template background image.
+        Coordinates are percentage-based (0 to 100) for resolution-independent placement.
         """
-        temp_file_path = None
-        try:
-            # 1. Ensure Shared Drive folder structure
-            folders = drive_service.ensure_campaign_folders(
-                campaign_id=campaign_id,
-                campaign_name=campaign_name,
+        # Load template image
+        img = Image.open(io.BytesIO(template_bytes)).convert("RGB")
+        width, height = img.size
+        draw = ImageDraw.Draw(img)
+
+        # 1. Name placement
+        name_x_pct = float(config.get("name_x_percent", 50.0))
+        name_y_pct = float(config.get("name_y_percent", 48.0))
+        font_family = config.get("font_family", DEFAULT_FONT)
+        font_size = int(config.get("font_size", 64))
+        font_color = config.get("font_color", "#1e293b")
+        text_align = config.get("text_align", "center")  # "center", "left", "right"
+
+        rgb_color = _hex_to_rgb(font_color)
+        font = cls.load_font(font_family, font_size)
+
+        # Calculate absolute pixel coordinates
+        x_px = int((name_x_pct / 100.0) * width)
+        y_px = int((name_y_pct / 100.0) * height)
+
+        # Anchor mapping for PIL
+        # "mm" = middle horizontal, middle vertical (center)
+        # "lm" = left horizontal, middle vertical
+        # "rm" = right horizontal, middle vertical
+        anchor_map = {
+            "center": "mm",
+            "left": "lm",
+            "right": "rm",
+        }
+        anchor = anchor_map.get(text_align, "mm")
+
+        # Draw participant name
+        draw.text(
+            (x_px, y_px),
+            participant_name.strip(),
+            fill=rgb_color,
+            font=font,
+            anchor=anchor,
+        )
+
+        # 2. Optional Certificate ID placement
+        if config.get("show_cert_id", True) and certificate_id:
+            cid_x_pct = float(config.get("cert_id_x_percent", 88.0))
+            cid_y_pct = float(config.get("cert_id_y_percent", 92.0))
+            cid_x = int((cid_x_pct / 100.0) * width)
+            cid_y = int((cid_y_pct / 100.0) * height)
+            small_font = cls.load_font("Montserrat", max(16, int(font_size * 0.25)))
+            draw.text(
+                (cid_x, cid_y),
+                f"ID: {certificate_id}",
+                fill=(100, 116, 139),
+                font=small_font,
+                anchor="mm",
             )
-            certificates_folder_id = folders["certificates_folder_id"]
 
-            # 2. Render certificate to local temporary file
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-                temp_file_path = tf.name
-
-            create_sample_certificate_pdf(
-                participant_name=participant_name,
-                event_title=campaign_name,
-                output_path=temp_file_path,
+        # 3. Optional Date placement
+        if config.get("show_date", False):
+            display_date = date_str or datetime.now(timezone.utc).strftime("%B %d, %Y")
+            date_x_pct = float(config.get("date_x_percent", 15.0))
+            date_y_pct = float(config.get("date_y_percent", 92.0))
+            date_x = int((date_x_pct / 100.0) * width)
+            date_y = int((date_y_pct / 100.0) * height)
+            date_font = cls.load_font("Montserrat", max(16, int(font_size * 0.25)))
+            draw.text(
+                (date_x, date_y),
+                f"Date: {display_date}",
+                fill=(100, 116, 139),
+                font=date_font,
+                anchor="mm",
             )
 
-            # 3. Upload to Google Shared Drive
-            clean_name = "".join(c for c in participant_name if c.isalnum() or c in (" ", "_", "-")).strip()
-            safe_filename = f"Certificate_{clean_name or 'Participant'}_{participant_id[:8]}.pdf"
+        return img
 
-            with open(temp_file_path, "rb") as f:
-                pdf_data = f.read()
+    @classmethod
+    def generate_pdf_bytes(
+        cls,
+        template_bytes: bytes,
+        participant_name: str,
+        config: Dict[str, Any],
+        certificate_id: Optional[str] = None,
+        event_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+    ) -> bytes:
+        """Generate high-resolution PDF bytes for a single participant."""
+        img = cls.render_certificate_image(
+            template_bytes=template_bytes,
+            participant_name=participant_name,
+            config=config,
+            certificate_id=certificate_id,
+            event_name=event_name,
+            date_str=date_str,
+        )
+        pdf_buffer = io.BytesIO()
+        img.save(pdf_buffer, format="PDF", resolution=300.0)
+        return pdf_buffer.getvalue()
 
-            upload_result = drive_service.upload_file(
-                file_content=pdf_data,
-                file_name=safe_filename,
-                folder_id=certificates_folder_id,
-                mime_type="application/pdf",
-                description=f"Certificate for {participant_name} ({participant_email or 'no-email'}) in {campaign_name}",
-            )
+    @classmethod
+    def generate_preview_base64(
+        cls,
+        template_bytes: bytes,
+        participant_name: str,
+        config: Dict[str, Any],
+        certificate_id: Optional[str] = "CERT-PREVIEW-001",
+    ) -> str:
+        """Render PNG preview and return as base64 data URI for instant web display."""
+        img = cls.render_certificate_image(
+            template_bytes=template_bytes,
+            participant_name=participant_name,
+            config=config,
+            certificate_id=certificate_id,
+        )
+        # Create web-friendly resized preview (max 1200px width for fast rendering)
+        max_preview_width = 1200
+        if img.width > max_preview_width:
+            aspect = img.height / img.width
+            new_height = int(max_preview_width * aspect)
+            img = img.resize((max_preview_width, new_height), Image.Resampling.LANCZOS)
 
-            log.info(
-                "Certificate generated and uploaded to Shared Drive",
-                participant_id=participant_id,
-                file_id=upload_result.get("file_id"),
-                drive_url=upload_result.get("web_view_link"),
-            )
-
-            return {
-                "drive_file_id": upload_result.get("file_id"),
-                "drive_web_url": upload_result.get("web_view_link"),
-                "file_name": safe_filename,
-                "file_size": len(pdf_data),
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-            }
-
-        finally:
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except Exception:
-                    pass
+        preview_buf = io.BytesIO()
+        img.save(preview_buf, format="JPEG", quality=85)
+        b64 = base64.b64encode(preview_buf.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64}"
 
 
 certificate_service = CertificateService()

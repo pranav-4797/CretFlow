@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -96,11 +96,11 @@ client_secret*.json
 
 
 # ─── Certificates & Uploads ───────────────────────────────────────────────────
-# These are stored in Cloudflare R2, not the repo
-uploads/
-certificates/
-templates/
-reports/
+# These are stored in Cloud storage, not the repo
+/uploads/
+/certificates/
+/templates/
+/reports/
 
 # ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log

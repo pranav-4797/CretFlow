@@ -319,8 +319,31 @@ class BatchProcessingEngine:
                     max_attempts=cls.MAX_ATTEMPTS,
                 )
                 return
+        elif campaign.get("template"):
+            # Seamless fallback: Auto-generate certificate PDF directly from template
+            tmpl = campaign.get("template") or {}
+            t_b64 = tmpl.get("template_bytes_b64")
+            t_config = tmpl.get("config") or {}
+            if t_b64:
+                try:
+                    import base64
+                    from app.services.certificate_service import certificate_service
+                    t_bytes = base64.b64decode(t_b64.encode("ascii"))
+                    pdf_bytes = certificate_service.generate_pdf_bytes(
+                        template_bytes=t_bytes,
+                        participant_name=recipient_name,
+                        config=t_config,
+                        certificate_id=participant.get("certificate_id") or f"CERT-{participant_id[:8].upper()}",
+                        event_name=campaign.get("event_name") or campaign_name,
+                    )
+                    log.info("Auto-generated certificate PDF on the fly for participant", participant_id=participant_id)
+                except Exception as ex:
+                    log.warning("On-the-fly certificate generation failed", error=str(ex))
 
         # 3. Render dynamic templates
+        event_name = campaign.get("event_name") or campaign.get("name") or campaign_name
+        cert_id = participant.get("certificate_id") or f"CERT-{str(participant_id)[:8].upper()}"
+
         variables = {
             "name": recipient_name,
             "recipient_name": recipient_name,
@@ -328,18 +351,34 @@ class BatchProcessingEngine:
             "recipient_email": recipient_email,
             "campaign": campaign_name,
             "campaign_name": campaign_name,
+            "event_name": event_name,
+            "event": event_name,
+            "certificate_id": cert_id,
+            "cert_id": cert_id,
             "date": datetime.now(timezone.utc).strftime("%B %d, %Y"),
+            "year": datetime.now(timezone.utc).strftime("%Y"),
         }
 
         subject = _render_email_template(subject_template, variables, escape_html=False)
         if body_template:
-            body_html = _render_email_template(body_template, variables, escape_html=True)
+            rendered_content = _render_email_template(body_template, variables, escape_html=True)
+            if "<p>" not in rendered_content and "<div" not in rendered_content:
+                rendered_content = rendered_content.replace("\n", "<br />\n")
+                body_html = f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b; font-size: 15px; line-height: 1.6;">
+                    <div style="margin-bottom: 20px;">{rendered_content}</div>
+                    <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+                    <p style="color: #94a3b8; font-size: 12px; margin: 0;">Verified and distributed securely via CertFlow.</p>
+                </div>
+                """
+            else:
+                body_html = rendered_content
         else:
             body_html = f"""
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
                 <h2 style="color: #4f46e5; margin-bottom: 12px;">Your Certificate is Ready!</h2>
                 <p style="color: #334155; font-size: 15px;">Dear {html.escape(recipient_name)},</p>
-                <p style="color: #334155; font-size: 15px;">Congratulations on your achievement! Please find your personalized certificate for <strong>{html.escape(campaign_name)}</strong> attached to this email.</p>
+                <p style="color: #334155; font-size: 15px;">Congratulations on completing <strong>{html.escape(event_name)}</strong>! Please find your personalized certificate attached to this email.</p>
                 <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
                 <p style="color: #94a3b8; font-size: 12px; margin: 0;">Distributed automatically via CertFlow using the official Gmail API.</p>
             </div>

@@ -13,6 +13,7 @@ import {
   XCircle,
   RefreshCw,
   Info,
+  Sparkles,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -438,6 +439,58 @@ export function CampaignEmailComposer({
 
         {/* Composer Form */}
         <form onSubmit={handleSendCampaign} className="space-y-4">
+          {/* Template Presets */}
+          <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border">
+            <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Quick Templates
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSubjectTemplate('Your Official Certificate for {{event_name}}')
+                  setBodyTemplate(
+                    'Dear {{name}},\n\nCongratulations on completing {{event_name}}!\n\nPlease find your personalized certificate attached to this email (Certificate ID: {{certificate_id}}).\n\nThank you for your active participation!\n\nWarm regards,\nEvent Organizing Committee'
+                  )
+                }}
+                className="text-[11px] h-7 bg-background"
+              >
+                🎓 Professional Certificate
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSubjectTemplate('{{name}}, your Certificate of Achievement for {{event_name}}!')
+                  setBodyTemplate(
+                    'Hi {{name}},\n\nThank you for being an inspiring part of {{event_name}}! We are thrilled to recognize your dedication.\n\nYour verified certificate is attached. Certificate ID: {{certificate_id}}.\n\nKeep building and innovating!\n\nBest,\nThe Organizing Team'
+                  )
+                }}
+                className="text-[11px] h-7 bg-background"
+              >
+                🚀 Tech Summit & Hackathon
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSubjectTemplate('Certificate of Attendance — {{event_name}}')
+                  setBodyTemplate(
+                    'Dear {{name}},\n\nThank you for attending {{event_name}}.\n\nYour verified certificate of attendance is attached to this email. You can present this for professional verification with ID: {{certificate_id}}.\n\nSincerely,\nCertFlow Team'
+                  )
+                }}
+                className="text-[11px] h-7 bg-background"
+              >
+                📜 Workshop & Seminar
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="email-subject" className="text-xs font-medium">Email Subject</Label>
@@ -456,6 +509,13 @@ export function CampaignEmailComposer({
                   className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-[10px]"
                 >
                   {'{event_name}'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertVariable('date', 'subject')}
+                  className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-[10px]"
+                >
+                  {'{date}'}
                 </button>
               </div>
             </div>
@@ -493,6 +553,13 @@ export function CampaignEmailComposer({
                   className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-[10px]"
                 >
                   {'{certificate_id}'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertVariable('date', 'body')}
+                  className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-[10px]"
+                >
+                  {'{date}'}
                 </button>
               </div>
             </div>

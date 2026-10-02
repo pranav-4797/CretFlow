@@ -11,11 +11,13 @@ import {
   Clock,
   Send,
   Loader2,
+  Award,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { CampaignEmailComposer } from '@/components/gmail/CampaignEmailComposer'
+import { CertificateStudio } from '@/components/certificates/CertificateStudio'
 import { api } from '@/services/api'
 
 interface Campaign {
@@ -31,7 +33,7 @@ interface Campaign {
 }
 
 export default function CampaignsPage() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'email_distributor'>('campaigns')
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'certificate_studio' | 'email_distributor'>('campaigns')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('')
@@ -64,12 +66,18 @@ export default function CampaignsPage() {
     setActiveTab('email_distributor')
   }
 
+  const handleOpenStudio = (campaign: Campaign) => {
+    setSelectedCampaignId(campaign.id || campaign.campaign_id)
+    setSelectedCampaignName(campaign.name || campaign.campaign_name)
+    setActiveTab('certificate_studio')
+  }
+
   return (
     <div className="page-container py-8 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
           <h1 className="section-title">Campaigns & Distribution</h1>
-          <p className="section-description">Manage certificate campaigns and distribute via Gmail.</p>
+          <p className="section-description">Design certificates, organize participants, and distribute via Gmail.</p>
         </motion.div>
 
         <div className="flex items-center gap-2">
@@ -85,6 +93,17 @@ export default function CampaignsPage() {
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               Campaigns
+            </button>
+            <button
+              onClick={() => setActiveTab('certificate_studio')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
+                activeTab === 'certificate_studio'
+                  ? 'bg-background shadow-xs text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Award className="h-3.5 w-3.5" />
+              Certificate Studio
             </button>
             <button
               onClick={() => setActiveTab('email_distributor')}
@@ -133,6 +152,7 @@ export default function CampaignsPage() {
                         <CardDescription className="line-clamp-2 mt-1">{camp.description}</CardDescription>
                       )}
                     </CardHeader>
+
                     <CardContent className="pt-0 space-y-4">
                       <div className="flex items-center gap-4 text-xs text-muted-foreground border-y py-2.5">
                         <div className="flex items-center gap-1.5">
@@ -151,15 +171,24 @@ export default function CampaignsPage() {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-1.5 text-xs"
+                          onClick={() => handleOpenStudio(camp)}
+                        >
+                          <Award className="h-3.5 w-3.5 text-primary" />
+                          Design Certificate
+                        </Button>
                         <Button
                           variant="gradient"
                           size="sm"
-                          className="w-full gap-2 text-xs"
+                          className="w-full gap-1.5 text-xs"
                           onClick={() => handleOpenDistributor(camp)}
                         >
                           <Send className="h-3.5 w-3.5" />
-                          Distribute with Gmail
+                          Distribute
                         </Button>
                       </div>
                     </CardContent>
@@ -191,19 +220,19 @@ export default function CampaignsPage() {
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button
-                      variant="outline"
-                      onClick={() => setActiveTab('email_distributor')}
-                      className="gap-2"
-                    >
-                      <Mail className="h-4 w-4 text-primary" />
-                      Open Email Distributor
-                    </Button>
                   </div>
                 </div>
               </CardContent>
             </Card>
           )}
+        </motion.div>
+      ) : activeTab === 'certificate_studio' ? (
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <CertificateStudio
+            campaignId={selectedCampaignId || 'default_campaign'}
+            campaignName={selectedCampaignName || 'Certificate Campaign'}
+            onSwitchToEmail={() => setActiveTab('email_distributor')}
+          />
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
