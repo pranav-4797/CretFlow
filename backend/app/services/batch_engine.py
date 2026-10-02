@@ -303,7 +303,17 @@ class BatchProcessingEngine:
             or participant.get("certificate_file_id")
         )
 
-        if drive_file_id:
+        # 1. Retrieve PDF from stored document bytes if present
+        if participant.get("certificate_bytes_b64"):
+            try:
+                import base64
+                pdf_bytes = base64.b64decode(participant["certificate_bytes_b64"].encode("ascii"))
+                log.info("Loaded pre-generated certificate PDF from participant document", participant_id=participant_id)
+            except Exception as e:
+                log.warning("Failed to decode certificate_bytes_b64", error=str(e))
+
+        # 2. Or retrieve PDF from Google Shared Drive if specified
+        if not pdf_bytes and drive_file_id:
             try:
                 pdf_bytes = await asyncio.to_thread(drive_service.download_file, drive_file_id)
                 log.info("Downloaded certificate PDF from Shared Drive", file_id=drive_file_id, size=len(pdf_bytes))

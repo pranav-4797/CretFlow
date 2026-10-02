@@ -88,36 +88,38 @@ async def generate_certificates(
                 event_name=event_name,
             )
 
-            # Upload to Google Shared Drive
+            # Upload to Google Shared Drive if folder is available
             clean_pname = "".join(c for c in p_name if c.isalnum() or c in (" ", "_", "-")).strip()
             pdf_filename = f"Certificate_{cert_id}_{clean_pname}.pdf"
 
             drive_file_id = None
             web_link = None
-            try:
-                drive_res = drive_service.upload_file(
-                    file_content=pdf_bytes,
-                    filename=pdf_filename,
-                    parent_folder_id=cert_folder_id,
-                    mime_type="application/pdf",
-                )
-                drive_file_id = drive_res.get("id")
-                web_link = drive_res.get("webViewLink")
-            except Exception as e:
-                log.warning("Drive upload failed for single certificate", participant_id=p_id, error=str(e))
+            if cert_folder_id:
+                try:
+                    drive_res = drive_service.upload_file(
+                        file_content=pdf_bytes,
+                        filename=pdf_filename,
+                        parent_folder_id=cert_folder_id,
+                        mime_type="application/pdf",
+                    )
+                    drive_file_id = drive_res.get("id")
+                    web_link = drive_res.get("webViewLink")
+                except Exception as e:
+                    log.warning("Drive upload failed for single certificate", participant_id=p_id, error=str(e))
 
             # Update participant in Firestore
-            firestore_service.update_participant(
-                campaign_id,
-                p_id,
-                {
-                    "certificate_id": cert_id,
-                    "certificate_drive_file_id": drive_file_id,
-                    "certificate_filename": pdf_filename,
-                    "drive_web_view_link": web_link,
-                    "status": "generated",
-                },
-            )
+            update_data = {
+                "certificate_id": cert_id,
+                "certificate_filename": pdf_filename,
+                "status": "generated",
+            }
+            if drive_file_id:
+                update_data["certificate_drive_file_id"] = drive_file_id
+                update_data["drive_web_view_link"] = web_link
+            else:
+                update_data["certificate_bytes_b64"] = base64.b64encode(pdf_bytes).decode("ascii")
+
+            firestore_service.update_participant(campaign_id, p_id, update_data)
             generated_count += 1
         except Exception as e:
             log.error("Failed to generate certificate for participant", participant_id=p_id, error=str(e))
@@ -129,7 +131,7 @@ async def generate_certificates(
         generated_count=generated_count,
         skipped_count=skipped_count,
         failed_count=failed_count,
-        message=f"Successfully generated {generated_count} personalized certificates in Google Shared Drive.",
+        message=f"Successfully generated {generated_count} personalized certificates.",
     )
 
 
