@@ -141,58 +141,68 @@ function onFormSubmit(e) {
   var SECRET_TOKEN = "${config.webhook_secret || ''}";
 
   try {
-    var response = e.response;
+    var response = null;
+    if (e && e.response) {
+      response = e.response;
+    } else {
+      // Allows testing with the "▶ Run" button in Apps Script editor
+      var form = FormApp.getActiveForm();
+      var allResponses = form.getResponses();
+      if (allResponses.length === 0) {
+        Logger.log("⚠️ No submissions found in form yet.");
+        return;
+      }
+      response = allResponses[allResponses.length - 1];
+    }
+
     var respondentEmail = response.getRespondentEmail() || "";
     var itemResponses = response.getItemResponses();
     var recipientName = "";
     var totalEarnedScore = 0;
     var totalPossibleScore = 0;
 
-    // 1. Extract Candidate Name from form answers
     for (var i = 0; i < itemResponses.length; i++) {
-      var item = itemResponses[i].getItem();
+      var ir = itemResponses[i];
+      var item = ir.getItem();
       var title = item.getTitle().toLowerCase();
-      var answer = itemResponses[i].getResponse();
+      var answer = ir.getResponse();
 
-      if (title.indexOf("name") !== -1 || title.indexOf("full name") !== -1 || title.indexOf("student") !== -1) {
-        if (!recipientName) {
-          recipientName = String(answer).trim();
-        }
+      // Extract Name and Email
+      if (title.indexOf("name") !== -1 || title.indexOf("student") !== -1) {
+        if (!recipientName) recipientName = String(answer).trim();
       }
       if (!respondentEmail && (title.indexOf("email") !== -1 || title.indexOf("mail") !== -1)) {
         respondentEmail = String(answer).trim();
       }
+
+      // Calculate score safely across all questions
+      try {
+        var score = ir.getScore();
+        if (score !== null && score !== undefined) {
+          totalEarnedScore += Number(score);
+          var maxPts = (typeof item.getPoints === "function") ? item.getPoints() : 20;
+          totalPossibleScore += Number(maxPts || 20);
+        }
+      } catch (errScore) {}
+    }
+
+    if (totalPossibleScore === 0) {
+      totalEarnedScore = 100;
+      totalPossibleScore = 100;
     }
 
     if (!recipientName) {
       recipientName = respondentEmail ? respondentEmail.split("@")[0] : "Student";
     }
 
-    // 2. Extract Quiz Score
-    var gradableResponses = response.getGradableItemResponses();
-    if (gradableResponses && gradableResponses.length > 0) {
-      for (var j = 0; j < gradableResponses.length; j++) {
-        var gradable = gradableResponses[j];
-        totalEarnedScore += (gradable.getScore() || 0);
-        var item = gradable.getItem();
-        if (item && item.asMultipleChoiceItem) {
-          totalPossibleScore += (item.asMultipleChoiceItem().getPoints() || 0);
-        } else {
-          totalPossibleScore += 1;
-        }
-      }
-    } else {
-      // Default to 100/100 if standard form submission
-      totalEarnedScore = 100;
-      totalPossibleScore = 100;
-    }
+    Logger.log("Sending: Student=" + recipientName + ", Email=" + respondentEmail + ", Score=" + totalEarnedScore + "/" + totalPossibleScore);
 
-    // 3. Dispatch to CertFlow Webhook
+    // Send to CertFlow Webhook
     var payload = {
       recipient_name: recipientName,
       recipient_email: respondentEmail,
       score: totalEarnedScore,
-      total_score: totalPossibleScore > 0 ? totalPossibleScore : 100,
+      total_score: totalPossibleScore,
       webhook_secret: SECRET_TOKEN || undefined
     };
 
@@ -204,9 +214,9 @@ function onFormSubmit(e) {
     };
 
     var res = UrlFetchApp.fetch(WEBHOOK_URL, options);
-    Logger.log("CertFlow Response: " + res.getContentText());
+    Logger.log("✅ CertFlow Response: " + res.getContentText());
   } catch (err) {
-    Logger.log("CertFlow Webhook Error: " + err.toString());
+    Logger.log("❌ CertFlow Webhook Error: " + err.toString());
   }
 }`
 
