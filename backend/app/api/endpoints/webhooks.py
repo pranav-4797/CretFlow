@@ -172,20 +172,63 @@ async def process_google_form_submission(
         conn = firestore_service.get_gmail_connection(owner_uid)
         if conn and conn.get("is_connected"):
             try:
-                subject = f"Congratulations on Passing {event_name}! Here is your Certificate"
-                body_html = f"""
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
-                    <h2 style="color: #4f46e5; margin-bottom: 8px;">Congratulations, {html.escape(payload.recipient_name)}! 🎓</h2>
+                custom_subject = campaign.get("quiz_email_subject")
+                custom_body = campaign.get("quiz_email_body")
+                show_score = campaign.get("show_score_in_email", True)
+
+                placeholders = {
+                    "{{name}}": html.escape(payload.recipient_name),
+                    "{{event_name}}": html.escape(event_name),
+                    "{{score}}": str(payload.score),
+                    "{{total_score}}": str(total_score),
+                    "{{score_percentage}}": f"{score_pct}%",
+                    "{{certificate_id}}": cert_id,
+                }
+
+                if custom_subject and custom_subject.strip():
+                    subject = custom_subject.strip()
+                    for ph, val in placeholders.items():
+                        subject = subject.replace(ph, val)
+                else:
+                    subject = f"Congratulations on Passing {event_name}! Here is your Certificate"
+
+                if custom_body and custom_body.strip():
+                    rendered_body = html.escape(custom_body.strip())
+                    for ph, val in placeholders.items():
+                        rendered_body = rendered_body.replace(ph, val)
+                    rendered_body_paragraphs = "".join(
+                        f"<p style='font-size: 15px; line-height: 1.6; color: #334155; margin-bottom: 12px;'>{p}</p>"
+                        for p in rendered_body.split("\n") if p.strip()
+                    )
+                else:
+                    rendered_body_paragraphs = f"""
                     <p style="font-size: 15px; line-height: 1.6; color: #334155;">
-                        You have successfully passed the assessment for <strong>{html.escape(event_name)}</strong> with a score of <strong>{score_pct}%</strong>!
+                        You have successfully passed the assessment for <strong>{html.escape(event_name)}</strong>!
                     </p>
+                    <p style="font-size: 14px; color: #334155;">
+                        Your official certificate has been generated and is attached to this email as a high-resolution PDF.
+                    </p>
+                    """
+
+                if show_score:
+                    score_card_html = f"""
                     <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
                         <p style="margin: 0 0 6px 0; font-size: 14px; color: #64748b;"><strong>Score:</strong> {payload.score} / {total_score} ({score_pct}%)</p>
                         <p style="margin: 0; font-size: 14px; color: #64748b;"><strong>Certificate ID:</strong> {cert_id}</p>
                     </div>
-                    <p style="font-size: 14px; color: #334155;">
-                        Your official certificate has been generated and is attached to this email as a high-resolution PDF.
-                    </p>
+                    """
+                else:
+                    score_card_html = f"""
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                        <p style="margin: 0; font-size: 14px; color: #64748b;"><strong>Certificate ID:</strong> {cert_id}</p>
+                    </div>
+                    """
+
+                body_html = f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; color: #1e293b;">
+                    <h2 style="color: #4f46e5; margin-bottom: 16px;">Congratulations, {html.escape(payload.recipient_name)}! 🎓</h2>
+                    {rendered_body_paragraphs}
+                    {score_card_html}
                     <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
                     <p style="font-size: 12px; color: #94a3b8; margin: 0;">Verified and distributed automatically via CertFlow.</p>
                 </div>
@@ -245,6 +288,9 @@ async def get_webhook_config(
         passing_score=float(campaign.get("passing_score", 60.0)),
         auto_email=bool(campaign.get("auto_email", True)),
         webhook_secret=campaign.get("webhook_secret"),
+        quiz_email_subject=campaign.get("quiz_email_subject"),
+        quiz_email_body=campaign.get("quiz_email_body"),
+        show_score_in_email=bool(campaign.get("show_score_in_email", True)),
     )
 
 
@@ -264,6 +310,9 @@ async def update_webhook_config(
             "passing_score": config.passing_score,
             "auto_email": config.auto_email,
             "webhook_secret": config.webhook_secret,
+            "quiz_email_subject": config.quiz_email_subject,
+            "quiz_email_body": config.quiz_email_body,
+            "show_score_in_email": config.show_score_in_email,
         },
     )
 

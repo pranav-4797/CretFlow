@@ -31,3 +31,16 @@ class CampaignWebhookConfig(BaseModel):
     passing_score: float = Field(60.0, ge=0.0, le=100.0, description="Minimum percentage required to earn certificate")
     auto_email: bool = Field(True, description="Whether to automatically dispatch email with certificate immediately")
     webhook_secret: Optional[str] = Field(None, max_length=64, description="Optional secret token to authenticate incoming submissions")
+    quiz_email_subject: Optional[str] = Field(
+        None,
+        max_length=200,
+        description="Custom subject line for quiz certificate emails (supports {{name}}, {{event_name}}, {{score_percentage}})"
+    )
+    quiz_email_body: Optional[str] = Field(
+        None,
+        description="Custom message content for the quiz email body (supports {{name}}, {{event_name}}, {{score}}, {{score_percentage}}, {{total_score}}, {{certificate_id}})"
+    )
+    show_score_in_email: bool = Field(
+        True,
+        description="Whether to show the student's score and percentage box in the email"
+    )

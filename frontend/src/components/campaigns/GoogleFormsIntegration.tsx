@@ -14,11 +14,17 @@ import {
   CheckCircle2,
   Terminal,
   Loader2,
+  Mail,
+  Eye,
+  Code,
+  Tag,
+  EyeOff,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { api, API_BASE_URL } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
 
@@ -31,6 +37,9 @@ interface WebhookConfig {
   passing_score: number
   auto_email: boolean
   webhook_secret?: string
+  quiz_email_subject?: string
+  quiz_email_body?: string
+  show_score_in_email: boolean
 }
 
 interface SimulationResult {
@@ -53,11 +62,17 @@ export const GoogleFormsIntegration: React.FC<GoogleFormsIntegrationProps> = ({
 }) => {
   const { toast } = useToast()
 
+  // Tab state for the right column
+  const [rightTab, setRightTab] = useState<'email_template' | 'script'>('email_template')
+
   // Configuration state
   const [config, setConfig] = useState<WebhookConfig>({
     passing_score: 60,
     auto_email: true,
     webhook_secret: '',
+    quiz_email_subject: 'Congratulations on Passing {{event_name}}! Here is your Certificate',
+    quiz_email_body: 'You have successfully passed the assessment for {{event_name}}! Your official certificate has been generated and is attached to this email as a high-resolution PDF.',
+    show_score_in_email: true,
   })
   const [loadingConfig, setLoadingConfig] = useState(false)
   const [savingConfig, setSavingConfig] = useState(false)
@@ -87,6 +102,9 @@ export const GoogleFormsIntegration: React.FC<GoogleFormsIntegrationProps> = ({
             passing_score: data.passing_score ?? 60,
             auto_email: data.auto_email ?? true,
             webhook_secret: data.webhook_secret || '',
+            quiz_email_subject: data.quiz_email_subject || 'Congratulations on Passing {{event_name}}! Here is your Certificate',
+            quiz_email_body: data.quiz_email_body || 'You have successfully passed the assessment for {{event_name}}! Your official certificate has been generated and is attached to this email as a high-resolution PDF.',
+            show_score_in_email: data.show_score_in_email ?? true,
           })
         }
       } catch (err) {
@@ -108,10 +126,13 @@ export const GoogleFormsIntegration: React.FC<GoogleFormsIntegrationProps> = ({
         passing_score: Number(config.passing_score),
         auto_email: Boolean(config.auto_email),
         webhook_secret: config.webhook_secret ? config.webhook_secret.trim() : null,
+        quiz_email_subject: config.quiz_email_subject ? config.quiz_email_subject.trim() : null,
+        quiz_email_body: config.quiz_email_body ? config.quiz_email_body.trim() : null,
+        show_score_in_email: Boolean(config.show_score_in_email),
       })
       toast({
         title: 'Settings Saved',
-        description: `Passing score set to ${config.passing_score}% with auto-email ${config.auto_email ? 'enabled' : 'disabled'}.`,
+        description: 'Quiz certification criteria and email template updated successfully.',
       })
     } catch (err: any) {
       toast({
@@ -122,6 +143,13 @@ export const GoogleFormsIntegration: React.FC<GoogleFormsIntegrationProps> = ({
     } finally {
       setSavingConfig(false)
     }
+  }
+
+  const handleInsertVariable = (tag: string) => {
+    setConfig(prev => ({
+      ...prev,
+      quiz_email_body: (prev.quiz_email_body || '') + ` ${tag} `,
+    }))
   }
 
   const handleCopyUrl = () => {
@@ -519,82 +547,290 @@ function onFormSubmit(e) {
           </Card>
         </div>
 
-        {/* Right Column: Copy-Paste Apps Script & 3-Step Setup Guide (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-500" />
-                    Google Apps Script (Ready to Copy)
-                  </CardTitle>
-                  <CardDescription>
-                    Pasted directly into your Google Form or Google Sheet script editor
-                  </CardDescription>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={handleCopyScript}
-                  className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
-                >
-                  {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copiedScript ? 'Copied to Clipboard!' : 'Copy Script'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="relative rounded-lg bg-zinc-950 p-4 font-mono text-xs text-zinc-200 overflow-x-auto max-h-[380px] border border-zinc-800">
-                <pre>{appsScriptCode}</pre>
-              </div>
+        {/* Right Column: Email Template Customizer & Copy-Paste Apps Script (7 cols) */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Right Column Tab Switcher */}
+          <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex gap-1.5 p-1 bg-muted/60 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setRightTab('email_template')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  rightTab === 'email_template'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Mail className="w-3.5 h-3.5 text-indigo-500" />
+                Customize Quiz Email
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightTab('script')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  rightTab === 'script'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Code className="w-3.5 h-3.5 text-indigo-500" />
+                Google Apps Script
+              </button>
+            </div>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+              {rightTab === 'email_template' ? 'Custom Student Email Template' : 'Setup Code for Google Forms'}
+            </span>
+          </div>
 
-              {/* 3 Step Setup Instructions */}
-              <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
-                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                  <HelpCircle className="w-4 h-4 text-indigo-500" />
-                  Quick Setup Guide (Takes 60 Seconds)
-                </h4>
-
-                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside pl-1">
-                  <li>
-                    <strong className="text-foreground">Open your Google Form:</strong> Click the
-                    three dots (<strong>⋮</strong>) in the upper right corner &rarr; select{' '}
-                    <span className="font-semibold text-foreground">Script editor</span> (or in the
-                    linked Google Sheet, select{' '}
-                    <span className="font-semibold text-foreground">Extensions &gt; Apps Script</span>).
-                  </li>
-                  <li>
-                    <strong className="text-foreground">Paste the code:</strong> Delete any
-                    sample code in the editor, paste the script copied above, and click the{' '}
-                    <span className="font-semibold text-foreground">Save (💾)</span> icon.
-                  </li>
-                  <li>
-                    <strong className="text-foreground">Add the Trigger:</strong> In the left
-                    sidebar of Apps Script, click the alarm clock icon (
-                    <span className="font-semibold text-foreground">Triggers ⏰</span>) &rarr; click{' '}
-                    <span className="font-semibold text-foreground">Add Trigger</span> (bottom right).
-                    <ul className="list-disc list-inside pl-4 pt-1 space-y-1">
-                      <li>Choose which function to run: <code className="bg-muted px-1 rounded">onFormSubmit</code></li>
-                      <li>Select event source: <code className="bg-muted px-1 rounded">From form</code></li>
-                      <li>Select event type: <code className="bg-muted px-1 rounded">On form submit</code></li>
-                    </ul>
-                  </li>
-                </ol>
-
-                <div className="pt-2 text-[11px] text-muted-foreground border-t flex items-center justify-between">
-                  <span>That&apos;s all! Every passing student will get their certificate instantly.</span>
-                  <a
-                    href="https://script.google.com"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+          {rightTab === 'email_template' ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-indigo-500" />
+                      Quiz Certificate Email Template
+                    </CardTitle>
+                    <CardDescription>
+                      Edit the email subject, message body, and control whether students see their score
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveConfig}
+                    disabled={savingConfig}
+                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
                   >
-                    Open Google Apps Script <ExternalLink className="w-3 h-3" />
-                  </a>
+                    {savingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Save Template
+                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardHeader>
+
+              <CardContent className="space-y-5">
+                {/* Score Visibility Toggle */}
+                <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/40">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-semibold flex items-center gap-1.5">
+                      {config.show_score_in_email ? (
+                        <Eye className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <EyeOff className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      Show Quiz Score to Student
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {config.show_score_in_email
+                        ? 'Student will see their score breakdown (e.g. 80 / 100 (80%)) in the congratulations email.'
+                        : 'Score breakdown will be hidden. Student only sees the congratulations and official Certificate ID.'}
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="show_score_toggle"
+                    checked={config.show_score_in_email}
+                    onChange={(e) => setConfig({ ...config, show_score_in_email: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Email Subject Line */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="quiz_email_subject" className="text-xs font-semibold">
+                    Email Subject Line
+                  </Label>
+                  <Input
+                    id="quiz_email_subject"
+                    value={config.quiz_email_subject || ''}
+                    onChange={(e) => setConfig({ ...config, quiz_email_subject: e.target.value })}
+                    placeholder="Congratulations on Passing {{event_name}}! Here is your Certificate"
+                    className="text-xs"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Available tags: <code className="bg-muted px-1 rounded">{"{{event_name}}"}</code>, <code className="bg-muted px-1 rounded">{"{{name}}"}</code>, <code className="bg-muted px-1 rounded">{"{{score_percentage}}"}</code>
+                  </p>
+                </div>
+
+                {/* Email Body Message */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="quiz_email_body" className="text-xs font-semibold">
+                      Custom Congratulations Message
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">Supports multiline text</span>
+                  </div>
+                  <Textarea
+                    id="quiz_email_body"
+                    rows={4}
+                    value={config.quiz_email_body || ''}
+                    onChange={(e) => setConfig({ ...config, quiz_email_body: e.target.value })}
+                    placeholder="Write your custom message here..."
+                    className="text-xs font-sans leading-relaxed"
+                  />
+                  
+                  {/* Variable chips */}
+                  <div className="pt-1">
+                    <div className="text-[11px] font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                      <Tag className="w-3 h-3 text-indigo-500" />
+                      Click tag to insert:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: 'Student Name', tag: '{{name}}' },
+                        { label: 'Event / Quiz Name', tag: '{{event_name}}' },
+                        { label: 'Score', tag: '{{score}}' },
+                        { label: 'Total Score', tag: '{{total_score}}' },
+                        { label: 'Score %', tag: '{{score_percentage}}' },
+                        { label: 'Certificate ID', tag: '{{certificate_id}}' },
+                      ].map((item) => (
+                        <button
+                          key={item.tag}
+                          type="button"
+                          onClick={() => handleInsertVariable(item.tag)}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-colors"
+                        >
+                          + {item.tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real-time Email Preview */}
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                    <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                    Live Student Email Preview
+                  </div>
+
+                  <div className="rounded-lg border bg-white dark:bg-zinc-950 p-4 text-xs shadow-xs space-y-3 font-sans">
+                    <div className="border-b pb-2 text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-foreground">Subject: </span>
+                      {(config.quiz_email_subject || 'Congratulations on Passing {{event_name}}! Here is your Certificate')
+                        .replace('{{event_name}}', campaignName)
+                        .replace('{{name}}', 'Jane Doe')
+                        .replace('{{score_percentage}}', '85%')}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-indigo-600 dark:text-indigo-400 font-bold text-sm">
+                        Congratulations, Jane Doe! 🎓
+                      </h3>
+                      <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-line leading-relaxed">
+                        {(config.quiz_email_body || 'You have successfully passed the assessment for {{event_name}}! Your official certificate has been generated and is attached to this email as a PDF.')
+                          .replace('{{event_name}}', campaignName)
+                          .replace('{{name}}', 'Jane Doe')
+                          .replace('{{score}}', '85')
+                          .replace('{{total_score}}', '100')
+                          .replace('{{score_percentage}}', '85%')
+                          .replace('{{certificate_id}}', 'CERT-8F29A10B')}
+                      </p>
+                    </div>
+
+                    {/* Conditionally rendered score box */}
+                    <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md p-3 space-y-1">
+                      {config.show_score_in_email ? (
+                        <div className="text-zinc-700 dark:text-zinc-300">
+                          <strong>Score:</strong> 85 / 100 (85%)
+                        </div>
+                      ) : null}
+                      <div className="text-zinc-700 dark:text-zinc-300 font-mono text-[11px]">
+                        <strong>Certificate ID:</strong> CERT-8F29A10B
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-2 text-[10px] text-zinc-400">
+                      Attachment: <span className="font-mono text-indigo-600 dark:text-indigo-400 font-medium">Certificate_CERT-8F29A10B_Jane Doe.pdf</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleSaveConfig}
+                  disabled={savingConfig}
+                  className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Email Template & Automation Settings
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-500" />
+                      Google Apps Script (Ready to Copy)
+                    </CardTitle>
+                    <CardDescription>
+                      Pasted directly into your Google Form or Google Sheet script editor
+                    </CardDescription>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleCopyScript}
+                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
+                  >
+                    {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {copiedScript ? 'Copied to Clipboard!' : 'Copy Script'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative rounded-lg bg-zinc-950 p-4 font-mono text-xs text-zinc-200 overflow-x-auto max-h-[380px] border border-zinc-800">
+                  <pre>{appsScriptCode}</pre>
+                </div>
+
+                {/* 3 Step Setup Instructions */}
+                <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                    <HelpCircle className="w-4 h-4 text-indigo-500" />
+                    Quick Setup Guide (Takes 60 Seconds)
+                  </h4>
+
+                  <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside pl-1">
+                    <li>
+                      <strong className="text-foreground">Open your Google Form:</strong> Click the
+                      three dots (<strong>⋮</strong>) in the upper right corner &rarr; select{' '}
+                      <span className="font-semibold text-foreground">Script editor</span> (or in the
+                      linked Google Sheet, select{' '}
+                      <span className="font-semibold text-foreground">Extensions &gt; Apps Script</span>).
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Paste the code:</strong> Delete any
+                      sample code in the editor, paste the script copied above, and click the{' '}
+                      <span className="font-semibold text-foreground">Save (💾)</span> icon.
+                    </li>
+                    <li>
+                      <strong className="text-foreground">Add the Trigger:</strong> In the left
+                      sidebar of Apps Script, click the alarm clock icon (
+                      <span className="font-semibold text-foreground">Triggers ⏰</span>) &rarr; click{' '}
+                      <span className="font-semibold text-foreground">Add Trigger</span> (bottom right).
+                      <ul className="list-disc list-inside pl-4 pt-1 space-y-1">
+                        <li>Choose which function to run: <code className="bg-muted px-1 rounded">onFormSubmit</code></li>
+                        <li>Select event source: <code className="bg-muted px-1 rounded">From form</code></li>
+                        <li>Select event type: <code className="bg-muted px-1 rounded">On form submit</code></li>
+                      </ul>
+                    </li>
+                  </ol>
+
+                  <div className="pt-2 text-[11px] text-muted-foreground border-t flex items-center justify-between">
+                    <span>That&apos;s all! Every passing student will get their certificate instantly.</span>
+                    <a
+                      href="https://script.google.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                    >
+                      Open Google Apps Script <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
