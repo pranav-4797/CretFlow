@@ -64,7 +64,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Security settings will be available after Firebase Auth is configured in Phase 2.
+                Your account is secured with Firebase Authentication. Credentials and password resets can be requested directly via your authentication provider.
               </p>
             </CardContent>
           </Card>
@@ -82,7 +82,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Notification settings will be available in a future phase.
+                Campaign delivery alerts and status summaries will be delivered directly to your connected Gmail address.
               </p>
             </CardContent>
           </Card>

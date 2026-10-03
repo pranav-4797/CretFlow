@@ -298,6 +298,56 @@ class FirestoreService:
         return campaigns
 
     @classmethod
+    def get_user_analytics(cls, user_id: str) -> Dict[str, Any]:
+        """Aggregate total campaigns, participants, certificates, and sent emails for user."""
+        campaigns = cls.list_campaigns(user_id, limit=100)
+        total_campaigns = len(campaigns)
+        total_participants = 0
+        total_sent = 0
+        total_certificates = 0
+
+        client = cls._get_client()
+
+        for c in campaigns:
+            c_id = c.get("campaign_id") or c.get("id")
+            c_recipients = int(c.get("total_recipients") or 0)
+            c_sent = int(c.get("sent_count") or 0)
+
+            p_count = 0
+            cert_count = 0
+            sent_count = 0
+            if client and c_id:
+                try:
+                    p_docs = client.collection("campaigns").document(c_id).collection("participants").stream()
+                    for p in p_docs:
+                        p_data = p.to_dict()
+                        p_count += 1
+                        if p_data.get("certificate_id") or p_data.get("status") == "generated":
+                            cert_count += 1
+                        if p_data.get("email_status") == "sent":
+                            sent_count += 1
+                except Exception:
+                    p_count = c_recipients
+                    sent_count = c_sent
+                    cert_count = c_sent
+            else:
+                p_count = c_recipients
+                sent_count = c_sent
+                cert_count = c_sent
+
+            total_participants += max(p_count, c_recipients)
+            total_sent += max(sent_count, c_sent)
+            total_certificates += max(cert_count, sent_count)
+
+        return {
+            "total_campaigns": total_campaigns,
+            "total_participants": total_participants,
+            "certificates_generated": total_certificates,
+            "emails_sent": total_sent,
+            "recent_campaigns": campaigns[:6],
+        }
+
+    @classmethod
     def delete_campaign(cls, campaign_id: str, user_id: str) -> bool:
         """Delete campaign if owned by user_id."""
         camp = cls.get_campaign(campaign_id, user_id=user_id)
