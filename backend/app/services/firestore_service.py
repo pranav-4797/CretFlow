@@ -357,6 +357,20 @@ class FirestoreService:
         client = cls._get_client()
         if client:
             try:
+                # Clean up participants subcollection
+                part_docs = client.collection("campaigns").document(campaign_id).collection("participants").stream()
+                for p in part_docs:
+                    try:
+                        p.reference.delete()
+                    except Exception:
+                        pass
+                # Clean up templates subcollection
+                tpl_docs = client.collection("campaigns").document(campaign_id).collection("templates").stream()
+                for t in tpl_docs:
+                    try:
+                        t.reference.delete()
+                    except Exception:
+                        pass
                 client.collection("campaigns").document(campaign_id).delete()
             except Exception:
                 pass

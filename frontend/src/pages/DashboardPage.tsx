@@ -13,11 +13,13 @@ import {
   FolderOpen,
   Loader2,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { api } from '@/services/api'
+import { DeleteCampaignDialog, CampaignToDelete } from '@/components/campaigns/DeleteCampaignDialog'
 
 interface DashboardStats {
   total_campaigns: number
@@ -47,6 +49,15 @@ export default function DashboardPage() {
   })
   const [recentCampaigns, setRecentCampaigns] = useState<CampaignSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [campaignToDelete, setCampaignToDelete] = useState<CampaignToDelete | null>(null)
+
+  const handleCampaignDeleted = (deletedId: string) => {
+    setRecentCampaigns((prev) => prev.filter((c) => (c.id || c.campaign_id) !== deletedId))
+    setStats((prev) => ({
+      ...prev,
+      total_campaigns: Math.max(0, prev.total_campaigns - 1),
+    }))
+  }
 
   useEffect(() => {
     async function loadDashboard() {
@@ -242,23 +253,33 @@ export default function DashboardPage() {
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <FolderOpen className="h-4 w-4 text-primary shrink-0" />
                             <h4 className="font-semibold text-sm line-clamp-1 text-foreground" title={cName}>
                               {cName}
                             </h4>
                           </div>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium capitalize shrink-0 ${
-                              status === 'completed'
-                                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                : status === 'active' || status === 'sending'
-                                ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                                : 'bg-muted text-muted-foreground border border-border'
-                            }`}
-                          >
-                            {status}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium capitalize shrink-0 ${
+                                status === 'completed'
+                                  ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                  : status === 'active' || status === 'sending'
+                                  ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                  : 'bg-muted text-muted-foreground border border-border'
+                              }`}
+                            >
+                              {status}
+                            </span>
+                            <button
+                              type="button"
+                              title="Delete Campaign"
+                              onClick={() => setCampaignToDelete(camp)}
+                              className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                         {camp.description ? (
                           <p className="text-xs text-muted-foreground line-clamp-2">{camp.description}</p>
@@ -317,6 +338,14 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Two-Step Verification Delete Campaign Modal */}
+      <DeleteCampaignDialog
+        campaign={campaignToDelete}
+        isOpen={!!campaignToDelete}
+        onClose={() => setCampaignToDelete(null)}
+        onDeleted={handleCampaignDeleted}
+      />
     </div>
   )
 }

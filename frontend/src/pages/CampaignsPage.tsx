@@ -13,6 +13,7 @@ import {
   Loader2,
   Award,
   ClipboardCheck,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -20,6 +21,7 @@ import { Link } from 'react-router-dom'
 import { CampaignEmailComposer } from '@/components/gmail/CampaignEmailComposer'
 import { CertificateStudio } from '@/components/certificates/CertificateStudio'
 import { GoogleFormsIntegration } from '@/components/campaigns/GoogleFormsIntegration'
+import { DeleteCampaignDialog } from '@/components/campaigns/DeleteCampaignDialog'
 import { api } from '@/services/api'
 
 interface Campaign {
@@ -40,6 +42,21 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>('')
   const [selectedCampaignName, setSelectedCampaignName] = useState<string>('')
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null)
+
+  const handleCampaignDeleted = (deletedId: string) => {
+    setCampaigns((prev) => prev.filter((c) => (c.id || c.campaign_id) !== deletedId))
+    if (selectedCampaignId === deletedId) {
+      const remaining = campaigns.filter((c) => (c.id || c.campaign_id) !== deletedId)
+      if (remaining.length > 0) {
+        setSelectedCampaignId(remaining[0].id || remaining[0].campaign_id)
+        setSelectedCampaignName(remaining[0].name || remaining[0].campaign_name)
+      } else {
+        setSelectedCampaignId('')
+        setSelectedCampaignName('')
+      }
+    }
+  }
 
   useEffect(() => {
     async function loadCampaigns() {
@@ -162,10 +179,20 @@ export default function CampaignsPage() {
                   <Card key={cId} className="hover:border-primary/50 transition-all shadow-xs flex flex-col justify-between">
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base font-semibold leading-tight">{cName}</CardTitle>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize bg-primary/10 text-primary border border-primary/20">
-                          {camp.status || 'draft'}
-                        </span>
+                        <CardTitle className="text-base font-semibold leading-tight line-clamp-1">{cName}</CardTitle>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize bg-primary/10 text-primary border border-primary/20">
+                            {camp.status || 'draft'}
+                          </span>
+                          <button
+                            type="button"
+                            title="Delete Campaign"
+                            onClick={() => setCampaignToDelete(camp)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                       {camp.description && (
                         <CardDescription className="line-clamp-2 mt-1">{camp.description}</CardDescription>
@@ -277,6 +304,14 @@ export default function CampaignsPage() {
           />
         </motion.div>
       )}
+
+      {/* Two-Step Verification Delete Campaign Modal */}
+      <DeleteCampaignDialog
+        campaign={campaignToDelete}
+        isOpen={!!campaignToDelete}
+        onClose={() => setCampaignToDelete(null)}
+        onDeleted={handleCampaignDeleted}
+      />
     </div>
   )
 }
