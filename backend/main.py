@@ -113,12 +113,35 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
+@app.api_route("/", methods=["GET", "HEAD"], tags=["health"], include_in_schema=False)
+async def root() -> dict:
+    """Root ping endpoint for UptimeRobot, Render, and uptime monitors."""
+    return {
+        "status": "ok",
+        "service": "certflow-backend",
+        "message": "CertFlow API is operational",
+        "version": "0.1.0",
+    }
+
+
 @app.get("/health", tags=["health"])
 async def health_check() -> dict:
     """
-    Health check endpoint for Render and load balancers.
+    Health check endpoint for Render, UptimeRobot, and load balancers.
     Returns 200 OK when the server is running.
     """
+    return {
+        "status": "ok",
+        "service": "certflow-backend",
+        "version": "0.1.0",
+        "environment": settings.environment,
+    }
+
+
+@app.api_route("/api/health", methods=["GET", "HEAD"], tags=["health"], include_in_schema=False)
+@app.head("/health", include_in_schema=False)
+async def health_check_alias() -> dict:
+    """Alias health check endpoint supporting HEAD and /api/health."""
     return {
         "status": "ok",
         "service": "certflow-backend",
