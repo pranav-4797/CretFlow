@@ -23,6 +23,9 @@ log = structlog.get_logger(__name__)
 class RestartReconciler:
     """Reconciles interrupted email jobs and stuck participants on startup or activity wakeup."""
 
+    _LAST_ACTIVITY_RECONCILE: Dict[str, float] = {}
+    RECONCILE_THROTTLE_SECONDS: float = 30.0
+
     @classmethod
     async def reconcile_all_on_startup(cls) -> Dict[str, Any]:
         """
@@ -67,6 +70,14 @@ class RestartReconciler:
                 # Recalculate campaign progress counters
                 firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
 
+                # Set campaign to paused so UI exposes Resume button cleanly
+                firestore_service.update_campaign(
+                    campaign_id,
+                    {
+                        "status": "paused",
+                    },
+                )
+
             log.info(
                 "Startup reconciliation completed successfully",
                 recovered_jobs=recovered_jobs,
@@ -89,12 +100,17 @@ class RestartReconciler:
             }
 
     @classmethod
-    async def reconcile_campaign_on_activity(cls, campaign_id: str) -> None:
+    async def reconcile_campaign_on_activity(cls, campaign_id: str, force: bool = False) -> None:
         """
         Reconcile a specific campaign when requested by the organizer dashboard.
-        Guarantees that if a campaign was interrupted by Render sleep, any stuck recipients
-        are reset back to queued/retrying so progress can resume.
+        Throttled to run at most once per 30 seconds per campaign to prevent Render OOM loops.
         """
+        import time
+        now = time.time()
+        if not force and (now - cls._LAST_ACTIVITY_RECONCILE.get(campaign_id, 0)) < cls.RECONCILE_THROTTLE_SECONDS:
+            return
+
+        cls._LAST_ACTIVITY_RECONCILE[campaign_id] = now
         try:
             stuck = firestore_service.reconcile_stuck_participants(campaign_id)
             if stuck > 0:

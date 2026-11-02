@@ -51,9 +51,12 @@ service cloud.firestore {
       allow delete: if isDocOwner();
 
       // Subcollection: Participants in this campaign
+      // Optimized to avoid get() read penalty when userId/owner_uid is present on participant
       match /participants/{participantId} {
-        allow read, write: if isAuthenticated() &&
-          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.userId == request.auth.uid;
+        allow read, write: if isAuthenticated() && (
+          (resource != null && (resource.data.userId == request.auth.uid || resource.data.owner_uid == request.auth.uid)) ||
+          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.userId == request.auth.uid
+        );
       }
     }
 

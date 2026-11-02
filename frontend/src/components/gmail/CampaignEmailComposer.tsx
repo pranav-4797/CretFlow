@@ -76,14 +76,14 @@ export function CampaignEmailComposer({
 
   useEffect(() => {
     fetchStatusAndStats()
-    // Periodic refresh while in processing state
+    // Periodic refresh while in processing state (6s interval to conserve memory and network)
     const interval = setInterval(() => {
       if (campaignStats?.campaign_status === 'processing') {
         gmailService.getCampaignStatus(campaignId).then((res) => {
           if (res) setCampaignStats(res)
         }).catch(() => {})
       }
-    }, 4000)
+    }, 6000)
 
     return () => clearInterval(interval)
   }, [campaignId, campaignStats?.campaign_status])

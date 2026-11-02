@@ -178,7 +178,7 @@ class CertificateService:
         event_name: Optional[str] = None,
         date_str: Optional[str] = None,
     ) -> bytes:
-        """Generate high-resolution PDF bytes for a single participant."""
+        """Generate high-resolution PDF bytes for a single participant and cleanly free image memory."""
         img = cls.render_certificate_image(
             template_bytes=template_bytes,
             participant_name=participant_name,
@@ -188,8 +188,12 @@ class CertificateService:
             date_str=date_str,
         )
         pdf_buffer = io.BytesIO()
-        img.save(pdf_buffer, format="PDF", resolution=300.0)
-        return pdf_buffer.getvalue()
+        try:
+            img.save(pdf_buffer, format="PDF", resolution=150.0)
+            return pdf_buffer.getvalue()
+        finally:
+            img.close()
+            pdf_buffer.close()
 
     @classmethod
     def generate_preview_base64(
@@ -206,17 +210,25 @@ class CertificateService:
             config=config,
             certificate_id=certificate_id,
         )
-        # Create web-friendly resized preview (max 1200px width for fast rendering)
-        max_preview_width = 1200
-        if img.width > max_preview_width:
-            aspect = img.height / img.width
-            new_height = int(max_preview_width * aspect)
-            img = img.resize((max_preview_width, new_height), Image.Resampling.LANCZOS)
+        try:
+            # Create web-friendly resized preview (max 1200px width for fast rendering)
+            max_preview_width = 1200
+            if img.width > max_preview_width:
+                aspect = img.height / img.width
+                new_height = int(max_preview_width * aspect)
+                resized = img.resize((max_preview_width, new_height), Image.Resampling.LANCZOS)
+                img.close()
+                img = resized
 
-        preview_buf = io.BytesIO()
-        img.save(preview_buf, format="JPEG", quality=85)
-        b64 = base64.b64encode(preview_buf.getvalue()).decode("ascii")
-        return f"data:image/jpeg;base64,{b64}"
+            preview_buf = io.BytesIO()
+            try:
+                img.save(preview_buf, format="JPEG", quality=85)
+                b64 = base64.b64encode(preview_buf.getvalue()).decode("ascii")
+                return f"data:image/jpeg;base64,{b64}"
+            finally:
+                preview_buf.close()
+        finally:
+            img.close()
 
 
 certificate_service = CertificateService()

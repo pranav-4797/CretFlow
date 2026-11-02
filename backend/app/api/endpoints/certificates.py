@@ -46,8 +46,8 @@ async def generate_certificates(
             detail="Campaign does not have a certificate template uploaded. Please upload a template in Certificate Studio first.",
         )
 
-    # Fetch all participants
-    participants = firestore_service.get_campaign_participants(campaign_id, limit=3000)
+    # Fetch all participants (lightweight metadata)
+    participants = firestore_service.get_campaign_participants(campaign_id, limit=3000, include_pdf_bytes=False)
     if not participants:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -117,10 +117,17 @@ async def generate_certificates(
                 update_data["certificate_drive_file_id"] = drive_file_id
                 update_data["drive_web_view_link"] = web_link
             else:
-                update_data["certificate_bytes_b64"] = base64.b64encode(pdf_bytes).decode("ascii")
+                # Do NOT store massive base64 PDF strings in Firestore participant documents.
+                # Storing 1-2MB base64 per doc easily exceeds Render's 512MB RAM and approaches
+                # Firestore's 1MB document limit. BatchEngine generates certificates on-the-fly
+                # from campaign.template at send time with 0 database storage.
+                pass
 
             firestore_service.update_participant(campaign_id, p_id, update_data)
             generated_count += 1
+            if generated_count % 10 == 0:
+                import gc
+                gc.collect()
         except Exception as e:
             log.error("Failed to generate certificate for participant", participant_id=p_id, error=str(e))
             failed_count += 1

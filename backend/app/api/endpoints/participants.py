@@ -30,7 +30,7 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB limit
 async def list_participants(
     campaign_id: str,
     status_filter: Optional[str] = Query(None, pattern="^(queued|processing|sent|retrying|failed|unknown|cancelled)$"),
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(50, ge=1, le=500, description="Page size limit to conserve database reads"),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """

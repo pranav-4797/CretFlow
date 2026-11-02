@@ -28,6 +28,19 @@ async def get_dashboard_analytics(
     return firestore_service.get_user_analytics(current_user.uid)
 
 
+@router.get("/firestore-metrics", summary="Get Firestore read telemetry and optimization metrics")
+async def get_firestore_metrics(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Returns real-time Firestore read operation counters to identify heavy features."""
+    from app.services.firestore_service import FirestoreMetrics
+    summary = FirestoreMetrics.get_summary()
+    return {
+        "metrics": summary,
+        "total_reads_recorded": sum(summary.values()),
+    }
+
+
 @router.get("/{campaign_id}", summary="Get campaign distribution report")
 async def get_campaign_report(
     campaign_id: str,
@@ -41,13 +54,11 @@ async def get_campaign_report(
             detail=f"Campaign '{campaign_id}' not found.",
         )
 
-    participants = firestore_service.get_campaign_participants(campaign_id, limit=200)
-
-    total_recipients = len(participants) or int(campaign.get("total_recipients", 0))
-    sent_count = sum(1 for p in participants if p.get("email_status") == "sent")
-    failed_count = sum(1 for p in participants if p.get("email_status") == "failed")
-    queued_count = sum(1 for p in participants if p.get("email_status") in ["queued", "pending"])
-    cert_count = sum(1 for p in participants if p.get("certificate_id") or p.get("status") == "generated")
+    total_recipients = int(campaign.get("total_recipients") or 0)
+    sent_count = int(campaign.get("sent_count") or 0)
+    failed_count = int(campaign.get("failed_count") or 0)
+    queued_count = int(campaign.get("queued_count") or max(0, total_recipients - (sent_count + failed_count)))
+    cert_count = int(campaign.get("certificates_generated") or campaign.get("certificates_count") or sent_count)
 
     return {
         "campaign_id": campaign_id,

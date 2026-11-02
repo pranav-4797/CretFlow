@@ -54,7 +54,7 @@ class BatchProcessingEngine:
     as the sole job and progress state store.
     """
 
-    DEFAULT_BATCH_SIZE: int = 15
+    DEFAULT_BATCH_SIZE: int = 10
     CONCURRENCY_LIMIT: int = 2
     LEASE_DURATION_SECONDS: int = 300  # 5 minutes
     INTER_SEND_DELAY: float = 0.25     # 250ms between sends to protect Gmail quota
@@ -99,8 +99,8 @@ class BatchProcessingEngine:
                 "message": "Campaign job is already in progress.",
             }
 
-        # 4. Fetch participants or initialize if none exists
-        participants = firestore_service.get_campaign_participants(campaign_id, limit=2000)
+        # 4. Fetch participants or initialize if none exists (lightweight projection, no heavy PDFs)
+        participants = firestore_service.get_campaign_participants(campaign_id, limit=2000, include_pdf_bytes=False)
         total_recipients = len(participants)
 
         if total_recipients == 0:
@@ -134,6 +134,8 @@ class BatchProcessingEngine:
             campaign_id,
             {
                 "status": "processing",
+                "total_recipients": total_recipients,
+                "queued_count": total_recipients,
                 "started_at": datetime.now(timezone.utc).isoformat(),
             },
         )
@@ -232,9 +234,9 @@ class BatchProcessingEngine:
                 # 5. Process current batch with bounded concurrency
                 semaphore = asyncio.Semaphore(cls.CONCURRENCY_LIMIT)
 
-                async def _process_single(participant: Dict[str, Any]):
+                async def _process_single(participant: Dict[str, Any]) -> str:
                     async with semaphore:
-                        await cls._send_to_participant(
+                        res = await cls._send_to_participant(
                             participant=participant,
                             campaign=campaign,
                             conn=conn,
@@ -242,13 +244,30 @@ class BatchProcessingEngine:
                             body_template=job_doc.get("body_template", "") if job_doc else "",
                         )
                         await asyncio.sleep(cls.INTER_SEND_DELAY)
+                        return res or "sent"
 
                 tasks = [_process_single(p) for p in batch]
-                await asyncio.gather(*tasks, return_exceptions=True)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # 6. Synchronize campaign counters and release lease for next cycle
-                firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
+                sent_delta = sum(1 for r in results if r == "sent")
+                failed_delta = sum(1 for r in results if r == "failed")
+                unknown_delta = sum(1 for r in results if r == "unknown")
+
+                # 6. Incrementally update campaign progress without reading all participants
+                firestore_service.increment_campaign_counters(
+                    campaign_id=campaign_id,
+                    sent_delta=sent_delta,
+                    failed_delta=failed_delta,
+                    unknown_delta=unknown_delta,
+                    processed_count=len(batch),
+                )
                 firestore_service.release_job_lease(job_id, lease_id)
+
+                # Explicitly free batch memory and invoke GC to prevent heap growth on 512MB limits
+                del batch
+                del tasks
+                import gc
+                gc.collect()
 
                 # Brief breather before claiming next batch
                 await asyncio.sleep(0.5)
@@ -281,7 +300,7 @@ class BatchProcessingEngine:
         # 1. Idempotency Check: Do not resend
         if participant.get("email_status") == "sent":
             log.info("Participant already marked sent, skipping", participant_id=participant_id)
-            return
+            return "skipped"
 
         if not recipient_email or "@" not in recipient_email:
             firestore_service.record_participant_failure(
@@ -292,7 +311,7 @@ class BatchProcessingEngine:
                 is_transient=False,
                 attempt_count=attempts,
             )
-            return
+            return "failed"
 
         # 2. Retrieve PDF from Google Shared Drive if specified
         pdf_bytes = None
@@ -328,7 +347,7 @@ class BatchProcessingEngine:
                     attempt_count=attempts,
                     max_attempts=cls.MAX_ATTEMPTS,
                 )
-                return
+                return "failed"
         elif campaign.get("template"):
             # Seamless fallback: Auto-generate certificate PDF directly from template
             tmpl = campaign.get("template") or {}
@@ -414,6 +433,7 @@ class BatchProcessingEngine:
                 attempt_count=attempts,
             )
             log.info("Sent certificate email successfully", recipient=recipient_email, message_id=message_id)
+            return "sent"
 
         except GmailNotConnectedError as e:
             log.error("Gmail authorization invalid/revoked during send", error=str(e))
@@ -425,6 +445,7 @@ class BatchProcessingEngine:
                 is_transient=False,
                 attempt_count=attempts,
             )
+            return "failed"
 
         except GmailServiceError as e:
             log.warning("GmailServiceError sending email", error=e.message, code=e.code, is_transient=e.is_transient)
@@ -437,6 +458,7 @@ class BatchProcessingEngine:
                 attempt_count=attempts,
                 max_attempts=cls.MAX_ATTEMPTS,
             )
+            return "failed"
 
         except asyncio.TimeoutError:
             # Important delivery ambiguity: network timed out during transmission
@@ -447,6 +469,7 @@ class BatchProcessingEngine:
                 error_message="Network timed out while waiting for Gmail API response.",
                 attempt_count=attempts,
             )
+            return "unknown"
 
         except Exception as e:
             err_str = str(e)

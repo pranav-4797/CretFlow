@@ -86,9 +86,7 @@ async def get_campaign_email_status(
             detail="Campaign not found or access denied.",
         )
 
-    # Activity wakeup reconciliation for this campaign
-    await reconciler.reconcile_campaign_on_activity(campaign_id)
-
+    # Fast status response directly from cached campaign document + 10 recent logs
     stats = firestore_service.get_campaign_stats(campaign_id, current_user.uid)
 
     return CampaignEmailStatusResponse(
@@ -183,5 +181,5 @@ async def reconcile_campaign(
     if not camp:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found.")
 
-    await reconciler.reconcile_campaign_on_activity(campaign_id)
+    await reconciler.reconcile_campaign_on_activity(campaign_id, force=True)
     return firestore_service.get_campaign_stats(campaign_id, current_user.uid)
