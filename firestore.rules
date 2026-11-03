@@ -27,16 +27,25 @@ service cloud.firestore {
       return isAuthenticated() && request.resource.data.userId == request.auth.uid;
     }
 
+    // Check if the user is a designated Super Admin
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email.lower() == 'admin@gmail.com' ||
+        request.auth.token.email.lower() == 'chopadepranav2007@gmail.com' ||
+        request.auth.token.admin == true
+      );
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Users Collection
     // Stores user accounts, preferences, and organization settings
     // ─────────────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Users can only read and modify their own profile
-      allow read: if isOwner(userId);
+      // Users can only read and modify their own profile (Super Admin can read all)
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -44,16 +53,17 @@ service cloud.firestore {
     // Certificate generation & delivery campaigns created by organizers
     // ─────────────────────────────────────────────────────────────────────────
     match /campaigns/{campaignId} {
-      // Organizers can read, list, and modify only their own campaigns
-      allow read: if isDocOwner();
-      allow create: if willBeDocOwner();
-      allow update: if isDocOwner() && request.resource.data.userId == resource.data.userId;
-      allow delete: if isDocOwner();
+      // Organizers can read, list, and modify their own; Super Admins manage all
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if willBeDocOwner() || isAdmin();
+      allow update: if (isDocOwner() && request.resource.data.userId == resource.data.userId) || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
 
       // Subcollection: Participants in this campaign
       // Optimized to avoid get() read penalty when userId/owner_uid is present on participant
       match /participants/{participantId} {
         allow read, write: if isAuthenticated() && (
+          isAdmin() ||
           (resource != null && (resource.data.userId == request.auth.uid || resource.data.owner_uid == request.auth.uid)) ||
           get(/databases/$(database)/documents/campaigns/$(campaignId)).data.userId == request.auth.uid
         );

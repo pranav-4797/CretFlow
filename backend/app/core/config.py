@@ -59,8 +59,13 @@ class Settings(BaseSettings):
                 origins.append(d)
         return origins
 
-    # ── Security ──────────────────────────────────────────────────────────────
+    # ── Security & Administration ─────────────────────────────────────────────
     secret_key: str = "dev-secret-key-change-in-production-32chars!"
+    admin_emails: str = "admin@gmail.com,chopadepranav2007@gmail.com"
+
+    @property
+    def admin_emails_list(self) -> List[str]:
+        return [e.strip().lower() for e in self.admin_emails.split(",") if e.strip()]
 
     # ── Firebase ──────────────────────────────────────────────────────────────
     firebase_project_id: str = "placeholder"

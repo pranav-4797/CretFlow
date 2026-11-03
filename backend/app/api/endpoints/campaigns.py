@@ -25,13 +25,17 @@ router = APIRouter()
 @router.get("/", response_model=List[CampaignResponse], include_in_schema=False)
 async def list_campaigns(
     limit: int = Query(50, ge=1, le=100),
+    all_users: bool = Query(False, description="Super Admin master switch: list all campaigns across platform"),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
-    List all campaigns owned by the authenticated user.
-    Prevents cross-user data leakage.
+    List campaigns. Non-admins see only their own campaigns.
+    Super Admins can pass all_users=True to list campaigns from all users across the platform.
     """
-    campaigns = firestore_service.list_campaigns(current_user.uid, limit=limit)
+    if all_users and current_user.is_admin:
+        campaigns = firestore_service.list_all_campaigns(limit=limit)
+    else:
+        campaigns = firestore_service.list_campaigns(current_user.uid, limit=limit)
     return [CampaignResponse.model_validate(c) for c in campaigns]
 
 
@@ -78,7 +82,8 @@ async def get_campaign(
     Retrieve single campaign details.
     Enforces strict IDOR protection: returns 404 if campaign is not owned by current_user.
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    user_id_check = None if current_user.is_admin else current_user.uid
+    camp = firestore_service.get_campaign(campaign_id, user_id=user_id_check)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,9 +100,10 @@ async def update_campaign(
 ):
     """
     Update campaign metadata.
-    Enforces strict IDOR protection.
+    Enforces strict IDOR protection for non-admins; Super Admins can update any campaign.
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    user_id_check = None if current_user.is_admin else current_user.uid
+    camp = firestore_service.get_campaign(campaign_id, user_id=user_id_check)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -120,9 +126,10 @@ async def delete_campaign(
 ):
     """
     Delete a campaign and its subdocuments.
-    Enforces strict IDOR protection.
+    Enforces strict IDOR protection for non-admins; Super Admins can delete any campaign.
     """
-    success = firestore_service.delete_campaign(campaign_id, user_id=current_user.uid)
+    user_id_check = None if current_user.is_admin else current_user.uid
+    success = firestore_service.delete_campaign(campaign_id, user_id=user_id_check)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

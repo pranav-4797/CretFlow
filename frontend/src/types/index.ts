@@ -11,6 +11,7 @@ export interface User {
   displayName: string | null
   photoURL: string | null
   createdAt: string
+  isAdmin?: boolean
 }
 
 // ─── Campaign ─────────────────────────────────────────────────────────────────

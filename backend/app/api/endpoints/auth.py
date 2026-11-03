@@ -15,6 +15,7 @@ class UserProfileResponse(BaseModel):
     uid: str
     email: str
     name: str | None = None
+    is_admin: bool = False
 
 
 @router.get("/me", response_model=UserProfileResponse, summary="Get current user profile")
@@ -27,6 +28,7 @@ async def get_me(current_user: AuthenticatedUser = Depends(get_current_user)) ->
         uid=current_user.uid,
         email=current_user.email,
         name=current_user.name,
+        is_admin=current_user.is_admin,
     )
 
 

@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Award,
+  ShieldCheck,
   Menu,
   X,
 } from 'lucide-react'
@@ -48,6 +49,13 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const isActive = (href: string) => location.pathname.startsWith(href)
 
+  const activeNavItems: NavItem[] = user?.isAdmin
+    ? [
+        ...navItems,
+        { label: 'Control Room', icon: ShieldCheck, href: '/admin' },
+      ]
+    : navItems
+
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       {/* Logo */}
@@ -71,7 +79,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-        {navItems.map((item) => {
+        {activeNavItems.map((item) => {
           const active = isActive(item.href)
           return (
             <Link
@@ -125,7 +133,14 @@ export function AppLayout({ children }: AppLayoutProps) {
                 exit={{ opacity: 0, width: 0 }}
                 className="overflow-hidden flex-1 min-w-0"
               >
-                <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium truncate">{user?.displayName || 'User'}</p>
+                  {user?.isAdmin && (
+                    <span className="px-1 py-0.2 rounded text-[9px] font-extrabold tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      ADMIN
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </motion.div>
             )}

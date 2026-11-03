@@ -14,6 +14,7 @@ import SettingsPage from '@/pages/SettingsPage'
 import VerifyPage from '@/pages/VerifyPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import CreateCampaignPage from '@/pages/CreateCampaignPage'
+import AdminPage from '@/pages/AdminPage'
 
 /**
  * Root application component.
@@ -27,12 +28,9 @@ import CreateCampaignPage from '@/pages/CreateCampaignPage'
  * Protected (require authentication):
  * /dashboard         → DashboardPage
  * /campaigns         → CampaignsPage
- * /campaigns/new     → CreateCampaignPage (Phase 3)
- * /campaigns/:id     → CampaignDetailPage (Phase 3)
+ * /campaigns/new     → CreateCampaignPage
  * /settings          → SettingsPage
- * /gmail             → GmailSettingsPage (Phase 8)
- *
- * Additional protected routes will be added in subsequent phases.
+ * /admin             → AdminPage (Super Admin Control Room)
  */
 export default function App() {
   return (
@@ -80,6 +78,14 @@ export default function App() {
               element={
                 <AppLayout>
                   <SettingsPage />
+                </AppLayout>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AppLayout>
+                  <AdminPage />
                 </AppLayout>
               }
             />

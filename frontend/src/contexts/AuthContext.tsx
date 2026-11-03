@@ -71,12 +71,15 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 /** Map a FirebaseUser to our app's User type */
 function mapFirebaseUser(fbUser: FirebaseUser): User {
+  const emailLower = (fbUser.email ?? '').trim().toLowerCase()
+  const isAdmin = emailLower === 'admin@gmail.com' || emailLower === 'chopadepranav2007@gmail.com'
   return {
     id: fbUser.uid,
     email: fbUser.email ?? '',
     displayName: fbUser.displayName,
     photoURL: fbUser.photoURL,
     createdAt: fbUser.metadata.creationTime ?? new Date().toISOString(),
+    isAdmin,
   }
 }
 

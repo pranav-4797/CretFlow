@@ -368,6 +368,32 @@ class FirestoreService:
         return campaigns
 
     @classmethod
+    def list_all_campaigns(cls, limit: int = 100, user_id_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List campaigns across all platform users (Super Admin only)."""
+        client = cls._get_client()
+        campaigns = []
+        if client:
+            try:
+                col = client.collection("campaigns")
+                if user_id_filter:
+                    docs = cls._apply_filter(col, "owner_uid", "==", user_id_filter).limit(limit).stream()
+                else:
+                    docs = col.limit(limit).stream()
+                campaigns = [d.to_dict() for d in docs]
+                FirestoreMetrics.record_read("admin_list_all_campaigns", len(campaigns))
+                return campaigns
+            except Exception as e:
+                log.warning("Firestore list_all_campaigns failed, using fallback", error=str(e))
+
+        for c in _IN_MEMORY_CAMPAIGNS.values():
+            if not user_id_filter or c.get("owner_uid") == user_id_filter or c.get("userId") == user_id_filter:
+                campaigns.append(dict(c))
+                if len(campaigns) >= limit:
+                    break
+        FirestoreMetrics.record_read("admin_list_all_campaigns_memory", len(campaigns))
+        return campaigns
+
+    @classmethod
     def get_user_analytics(cls, user_id: str) -> Dict[str, Any]:
         """Aggregate total campaigns, participants, certificates, and sent emails directly from campaign metadata (0 subcollection reads)."""
         campaigns = cls.list_campaigns(user_id, limit=100)
@@ -394,9 +420,9 @@ class FirestoreService:
         }
 
     @classmethod
-    def delete_campaign(cls, campaign_id: str, user_id: str) -> bool:
-        """Delete campaign if owned by user_id."""
-        camp = cls.get_campaign(campaign_id, user_id=user_id)
+    def delete_campaign(cls, campaign_id: str, user_id: Optional[str] = None) -> bool:
+        """Delete campaign if owned by user_id, or unconditionally if user_id is None (Super Admin)."""
+        camp = cls.get_campaign(campaign_id, user_id=user_id) if user_id else cls.get_campaign(campaign_id)
         if not camp:
             return False
 

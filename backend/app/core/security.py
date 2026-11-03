@@ -25,8 +25,14 @@ class AuthenticatedUser:
         self.email = email
         self.name = name
 
+    @property
+    def is_admin(self) -> bool:
+        """True if the authenticated user has Super Admin privileges."""
+        from app.core.config import settings
+        return (self.email or "").strip().lower() in settings.admin_emails_list
+
     def __repr__(self) -> str:
-        return f"AuthenticatedUser(uid={self.uid!r}, email={self.email!r})"
+        return f"AuthenticatedUser(uid={self.uid!r}, email={self.email!r}, is_admin={self.is_admin})"
 
 
 async def get_current_user(
@@ -91,3 +97,15 @@ async def get_optional_user(
         return await get_current_user(credentials)
     except HTTPException:
         return None
+
+
+async def require_admin(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
+    """Dependency that ensures the authenticated user is a Super Admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Super Admin privileges required.",
+        )
+    return current_user
