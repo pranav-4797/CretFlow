@@ -16,6 +16,7 @@ export interface User {
 // ─── Campaign ─────────────────────────────────────────────────────────────────
 
 export type CampaignStatus = 'draft' | 'active' | 'processing' | 'completed' | 'cancelled'
+export type CampaignType = 'spreadsheet' | 'google_forms'
 
 export interface Campaign {
   id: string
@@ -25,6 +26,7 @@ export interface Campaign {
   organization: string
   eventDate: string | null
   status: CampaignStatus
+  campaign_type?: CampaignType
   participantCount: number
   generatedCount: number
   sentCount: number

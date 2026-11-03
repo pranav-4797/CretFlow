@@ -58,6 +58,8 @@ async def create_campaign(
         updates["subject_template"] = payload.subject_template
     if payload.body_template:
         updates["body_template"] = payload.body_template
+    if payload.campaign_type:
+        updates["campaign_type"] = payload.campaign_type
 
     if updates:
         firestore_service.update_campaign(campaign_id, updates)

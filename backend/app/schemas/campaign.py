@@ -16,6 +16,7 @@ class CreateCampaignRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     subject_template: Optional[str] = Field("Your Certificate", max_length=200)
     body_template: Optional[str] = Field(None, max_length=5000)
+    campaign_type: Optional[str] = Field("spreadsheet", pattern="^(spreadsheet|google_forms)$", description="Campaign type: spreadsheet or google_forms")
 
     @model_validator(mode="before")
     @classmethod
@@ -40,6 +41,7 @@ class UpdateCampaignRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     subject_template: Optional[str] = Field(None, max_length=200)
     body_template: Optional[str] = Field(None, max_length=5000)
+    campaign_type: Optional[str] = Field(None, pattern="^(spreadsheet|google_forms)$")
     status: Optional[str] = Field(None, pattern="^(draft|active|processing|paused|completed|failed|cancelled)$")
 
     @model_validator(mode="before")
@@ -68,6 +70,7 @@ class CampaignResponse(BaseModel):
     name: str
     campaign_name: str
     description: Optional[str] = None
+    campaign_type: str = "spreadsheet"
     status: str = "draft"
     total_recipients: int = 0
     queued_count: int = 0
@@ -91,4 +94,5 @@ class CampaignResponse(BaseModel):
             data["owner_uid"] = u_id
             data["name"] = c_name
             data["campaign_name"] = c_name
+            data["campaign_type"] = data.get("campaign_type") or "spreadsheet"
         return data

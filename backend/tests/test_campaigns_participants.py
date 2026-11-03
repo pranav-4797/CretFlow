@@ -65,6 +65,7 @@ async def test_campaign_crud_flow_and_idor(client: AsyncClient, auth_user: Authe
     assert create_res.status_code == status.HTTP_201_CREATED
     data = create_res.json()
     assert data["name"] == payload["name"]
+    assert data["campaign_type"] == "spreadsheet"
     campaign_id = data["id"]
     assert data["user_id"] == auth_user.uid
 

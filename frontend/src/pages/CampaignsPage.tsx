@@ -13,11 +13,12 @@ import {
   Loader2,
   Award,
   ClipboardCheck,
+  FileSpreadsheet,
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CampaignEmailComposer } from '@/components/gmail/CampaignEmailComposer'
 import { CertificateStudio } from '@/components/certificates/CertificateStudio'
 import { GoogleFormsIntegration } from '@/components/campaigns/GoogleFormsIntegration'
@@ -30,6 +31,7 @@ interface Campaign {
   name: string
   campaign_name: string
   description?: string
+  campaign_type?: string
   status: string
   total_recipients: number
   sent_count: number
@@ -37,10 +39,18 @@ interface Campaign {
 }
 
 export default function CampaignsPage() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'certificate_studio' | 'email_distributor' | 'google_forms'>('campaigns')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+  const initialId = searchParams.get('id')
+
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'certificate_studio' | 'email_distributor' | 'google_forms'>(
+    initialTab === 'certificate_studio' || initialTab === 'email_distributor' || initialTab === 'google_forms'
+      ? initialTab
+      : 'campaigns'
+  )
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('')
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(initialId || '')
   const [selectedCampaignName, setSelectedCampaignName] = useState<string>('')
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null)
 
@@ -66,8 +76,10 @@ export default function CampaignsPage() {
         if (Array.isArray(data)) {
           setCampaigns(data)
           if (data.length > 0) {
-            setSelectedCampaignId(data[0].id || data[0].campaign_id)
-            setSelectedCampaignName(data[0].name || data[0].campaign_name)
+            const matched = initialId ? data.find((c) => (c.id || c.campaign_id) === initialId) : null
+            const target = matched || data[0]
+            setSelectedCampaignId(target.id || target.campaign_id)
+            setSelectedCampaignName(target.name || target.campaign_name)
           }
         }
       } catch (err) {
@@ -77,7 +89,7 @@ export default function CampaignsPage() {
       }
     }
     loadCampaigns()
-  }, [])
+  }, [initialId])
 
   const handleOpenDistributor = (campaign: Campaign) => {
     setSelectedCampaignId(campaign.id || campaign.campaign_id)
@@ -181,6 +193,17 @@ export default function CampaignsPage() {
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base font-semibold leading-tight line-clamp-1">{cName}</CardTitle>
                         <div className="flex items-center gap-1.5 shrink-0">
+                          {camp.campaign_type === 'google_forms' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
+                              <ClipboardCheck className="h-3 w-3" />
+                              Google Form
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800">
+                              <FileSpreadsheet className="h-3 w-3" />
+                              Spreadsheet
+                            </span>
+                          )}
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize bg-primary/10 text-primary border border-primary/20">
                             {camp.status || 'draft'}
                           </span>
@@ -228,16 +251,20 @@ export default function CampaignsPage() {
                           Design
                         </Button>
                         <Button
-                          variant="outline"
+                          variant={camp.campaign_type === 'google_forms' ? 'default' : 'outline'}
                           size="sm"
-                          className="w-full gap-1 text-[11px] px-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                          className={`w-full gap-1 text-[11px] px-1.5 ${
+                            camp.campaign_type === 'google_forms'
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                              : 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40'
+                          }`}
                           onClick={() => handleOpenForms(camp)}
                         >
-                          <ClipboardCheck className="h-3.5 w-3.5 text-indigo-500" />
+                          <ClipboardCheck className="h-3.5 w-3.5" />
                           Forms Quiz
                         </Button>
                         <Button
-                          variant="gradient"
+                          variant={camp.campaign_type === 'google_forms' ? 'outline' : 'gradient'}
                           size="sm"
                           className="w-full gap-1 text-[11px] px-1.5"
                           onClick={() => handleOpenDistributor(camp)}
