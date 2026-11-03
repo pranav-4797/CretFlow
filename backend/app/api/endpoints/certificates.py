@@ -23,7 +23,7 @@ async def generate_certificates(
     req: GenerateCertificatesRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
@@ -148,7 +148,7 @@ async def download_sample_pdf(
     name: str = "Jane Doe",
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 

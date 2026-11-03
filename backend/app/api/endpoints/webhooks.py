@@ -280,7 +280,7 @@ async def get_webhook_config(
     campaign_id: str,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
@@ -300,7 +300,7 @@ async def update_webhook_config(
     config: CampaignWebhookConfig,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 

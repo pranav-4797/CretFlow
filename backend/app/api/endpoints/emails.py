@@ -79,7 +79,8 @@ async def get_campaign_email_status(
     Reconciles any stuck participants if the service recently woke up from Render sleep.
     Ensures user can only view their own campaign logs.
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    camp = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -87,7 +88,7 @@ async def get_campaign_email_status(
         )
 
     # Fast status response directly from cached campaign document + 10 recent logs
-    stats = firestore_service.get_campaign_stats(campaign_id, current_user.uid)
+    stats = firestore_service.get_campaign_stats(campaign_id, uid_check)
 
     return CampaignEmailStatusResponse(
         campaign_id=campaign_id,
@@ -111,7 +112,8 @@ async def pause_campaign(
 ):
     """Pause an active email campaign."""
     try:
-        return await batch_engine.pause_campaign(current_user.uid, campaign_id)
+        uid_check = None if current_user.is_admin else current_user.uid
+        return await batch_engine.pause_campaign(uid_check, campaign_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -126,7 +128,8 @@ async def resume_campaign(
 ):
     """Resume a paused email campaign."""
     try:
-        return await batch_engine.resume_campaign(current_user.uid, campaign_id)
+        uid_check = None if current_user.is_admin else current_user.uid
+        return await batch_engine.resume_campaign(uid_check, campaign_id)
     except GmailNotConnectedError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
     except ValueError as e:
@@ -143,7 +146,8 @@ async def cancel_campaign(
 ):
     """Cancel campaign sending and mark pending recipients cancelled."""
     try:
-        return await batch_engine.cancel_campaign(current_user.uid, campaign_id)
+        uid_check = None if current_user.is_admin else current_user.uid
+        return await batch_engine.cancel_campaign(uid_check, campaign_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -163,7 +167,8 @@ async def retry_failed_emails(
     - Re-queues without duplicate sends
     """
     try:
-        return await batch_engine.retry_failed_recipients(current_user.uid, campaign_id)
+        uid_check = None if current_user.is_admin else current_user.uid
+        return await batch_engine.retry_failed_recipients(uid_check, campaign_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -177,9 +182,10 @@ async def reconcile_campaign(
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Force an immediate reconciliation of campaign counters and stuck leases."""
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    camp = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not camp:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found.")
 
     await reconciler.reconcile_campaign_on_activity(campaign_id, force=True)
-    return firestore_service.get_campaign_stats(campaign_id, current_user.uid)
+    return firestore_service.get_campaign_stats(campaign_id, uid_check)

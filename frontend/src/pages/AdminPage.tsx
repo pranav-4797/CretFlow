@@ -529,7 +529,13 @@ export default function AdminPage() {
                     return (
                       <tr key={cid} className="hover:bg-muted/20 transition-colors">
                         <td className="py-3.5 px-4">
-                          <div className="font-semibold text-foreground">{cname}</div>
+                          <Link
+                            to={`/campaigns?tab=certificate_studio&id=${cid}`}
+                            className="font-semibold text-foreground hover:text-primary transition-colors hover:underline block"
+                            title={`Open ${cname}`}
+                          >
+                            {cname}
+                          </Link>
                           <div className="font-mono text-[10px] text-muted-foreground truncate max-w-[220px]" title={cid}>
                             {cid}
                           </div>

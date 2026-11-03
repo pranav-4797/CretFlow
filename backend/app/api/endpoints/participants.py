@@ -37,7 +37,7 @@ async def list_participants(
     List participants for a campaign.
     Enforces strict IDOR verification — returns 404 if campaign is not owned by current_user.
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    camp = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,7 +66,7 @@ async def upload_participants(
     - Enforces 10MB max upload size (DoS / memory protection)
     - Sanitizes strings, validates email formats, strips control characters
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    camp = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -195,7 +195,7 @@ async def add_participant(
     Manually add a participant to a campaign.
     Enforces strict IDOR verification.
     """
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    camp = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

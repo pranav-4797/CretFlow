@@ -1,19 +1,17 @@
-"""Certificate template endpoints."""
 import base64
 import io
-from typing import Any, Dict
-
-import structlog
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from PIL import Image
+import structlog
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.schemas.template import (
     TemplateConfig,
-    TemplatePreviewRequest,
-    TemplatePreviewResponse,
     TemplateResponse,
     TemplateUploadResponse,
+    TemplatePreviewRequest,
+    TemplatePreviewResponse,
 )
 from app.services.certificate_service import certificate_service
 from app.services.drive_service import drive_service
@@ -28,7 +26,8 @@ async def get_template(
     campaign_id: str,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    campaign = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
@@ -58,7 +57,8 @@ async def upload_template(
     file: UploadFile = File(...),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    campaign = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
@@ -76,47 +76,51 @@ async def upload_template(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid image file: {str(e)}")
 
-    # 1. Upload to Google Shared Drive if available
+    # Compress / resize if extremely high resolution (> 3000px on long edge) to save storage
+    max_dim = 3000
+    if max(width, height) > max_dim:
+        scale = max_dim / max(width, height)
+        pil_img = pil_img.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
+        width, height = pil_img.size
+
+    # Convert to JPEG for compact storage in Firestore (and optionally Drive)
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="JPEG", quality=88, optimize=True)
+    optimized_bytes = buffer.getvalue()
+
+    # Upload to Shared Drive if available
     drive_file_id = None
     try:
-        folders = drive_service.ensure_campaign_folders(campaign_id, campaign.get("campaign_name", "Campaign"))
-        template_folder_id = folders.get("template")
-        drive_res = drive_service.upload_file(
-            file_content=file_bytes,
-            filename=f"template_{campaign_id}_{file.filename}",
-            parent_folder_id=template_folder_id,
-            mime_type=file.content_type or "image/png",
+        drive_file_id = drive_service.upload_file(
+            file_bytes=optimized_bytes,
+            filename=f"template_{campaign_id}.jpg",
+            mime_type="image/jpeg",
         )
-        drive_file_id = drive_res.get("id")
-        log.info("Uploaded template to Google Shared Drive", file_id=drive_file_id)
     except Exception as e:
-        log.warning("Could not upload template to Shared Drive, using Firestore base64 backup", error=str(e))
+        log.warning("Drive upload failed for template, will rely on Firestore fallback", error=str(e))
 
-    # Keep compressed base64 for fast client previews
-    preview_img = pil_img.copy()
-    if preview_img.width > 1400:
-        aspect = preview_img.height / preview_img.width
-        preview_img = preview_img.resize((1400, int(1400 * aspect)), Image.Resampling.LANCZOS)
-    buf = io.BytesIO()
-    preview_img.save(buf, format="JPEG", quality=80)
-    b64_str = base64.b64encode(buf.getvalue()).decode("ascii")
+    # Base64 string for direct rendering in canvas
+    b64_str = base64.b64encode(optimized_bytes).decode("ascii")
+    data_url = f"data:image/jpeg;base64,{b64_str}"
 
     default_config = TemplateConfig()
-    template_data = {
-        "template_drive_file_id": drive_file_id,
+    template_doc = {
+        "template_image_url": data_url,
         "template_bytes_b64": b64_str,
-        "filename": file.filename,
+        "template_drive_file_id": drive_file_id,
         "width": width,
         "height": height,
         "config": default_config.model_dump(),
     }
 
-    firestore_service.update_campaign(campaign_id, {"template": template_data})
+    firestore_service.update_campaign(campaign_id, {"template": template_doc})
+
+    log.info("Certificate template uploaded", campaign_id=campaign_id, width=width, height=height)
 
     return TemplateUploadResponse(
         campaign_id=campaign_id,
-        message="Certificate template uploaded successfully.",
-        template_image_url=f"data:image/jpeg;base64,{b64_str}",
+        message="Template uploaded and configured successfully.",
+        template_image_url=data_url,
         template_drive_file_id=drive_file_id,
         width=width,
         height=height,
@@ -130,7 +134,8 @@ async def update_template_config(
     config: TemplateConfig,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    campaign = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 
@@ -147,7 +152,8 @@ async def preview_template(
     preview_req: TemplatePreviewRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    uid_check = None if current_user.is_admin else current_user.uid
+    campaign = firestore_service.get_campaign(campaign_id, user_id=uid_check)
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
 

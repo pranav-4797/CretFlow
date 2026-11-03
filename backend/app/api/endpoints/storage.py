@@ -56,7 +56,7 @@ async def provision_campaign_folders(
     Enforces strict IDOR protection — campaign must be owned by current_user.
     """
     from app.services.firestore_service import firestore_service
-    camp = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    camp = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not camp:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { CampaignEmailComposer } from '@/components/gmail/CampaignEmailComposer'
 import { CertificateStudio } from '@/components/certificates/CertificateStudio'
 import { GoogleFormsIntegration } from '@/components/campaigns/GoogleFormsIntegration'
@@ -39,6 +40,7 @@ interface Campaign {
 }
 
 export default function CampaignsPage() {
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
   const initialId = searchParams.get('id')
@@ -72,15 +74,29 @@ export default function CampaignsPage() {
     async function loadCampaigns() {
       try {
         setLoading(true)
-        const data = await api.get<Campaign[]>('/api/campaigns')
-        if (Array.isArray(data)) {
-          setCampaigns(data)
-          if (data.length > 0) {
-            const matched = initialId ? data.find((c) => (c.id || c.campaign_id) === initialId) : null
-            const target = matched || data[0]
-            setSelectedCampaignId(target.id || target.campaign_id)
-            setSelectedCampaignName(target.name || target.campaign_name)
+        // Super Admins load platform-wide campaigns so they can manage any campaign
+        const endpoint = user?.isAdmin ? '/api/campaigns?all_users=true' : '/api/campaigns'
+        const data = await api.get<Campaign[]>(endpoint)
+        let list: Campaign[] = Array.isArray(data) ? [...data] : []
+
+        // If a specific campaign ID was requested and isn't present in list, fetch it directly
+        if (initialId && !list.some((c) => (c.id || c.campaign_id) === initialId)) {
+          try {
+            const single = await api.get<Campaign>(`/api/campaigns/${initialId}`)
+            if (single && (single.id || single.campaign_id)) {
+              list = [single, ...list]
+            }
+          } catch (singleErr) {
+            console.warn('Could not load requested initial campaign:', singleErr)
           }
+        }
+
+        setCampaigns(list)
+        if (list.length > 0) {
+          const matched = initialId ? list.find((c) => (c.id || c.campaign_id) === initialId) : null
+          const target = matched || list[0]
+          setSelectedCampaignId(target.id || target.campaign_id)
+          setSelectedCampaignName(target.name || target.campaign_name)
         }
       } catch (err) {
         console.warn('Could not load campaigns list:', err)
@@ -89,7 +105,21 @@ export default function CampaignsPage() {
       }
     }
     loadCampaigns()
-  }, [initialId])
+  }, [initialId, user?.isAdmin])
+
+  // Sync tab and ID if URL parameters change
+  useEffect(() => {
+    if (initialTab && ['campaigns', 'certificate_studio', 'email_distributor', 'google_forms'].includes(initialTab)) {
+      setActiveTab(initialTab as any)
+    }
+    if (initialId && campaigns.length > 0) {
+      const matched = campaigns.find((c) => (c.id || c.campaign_id) === initialId)
+      if (matched) {
+        setSelectedCampaignId(matched.id || matched.campaign_id)
+        setSelectedCampaignName(matched.name || matched.campaign_name)
+      }
+    }
+  }, [initialTab, initialId, campaigns])
 
   const handleOpenDistributor = (campaign: Campaign) => {
     setSelectedCampaignId(campaign.id || campaign.campaign_id)
@@ -139,7 +169,7 @@ export default function CampaignsPage() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Award className="h-3.5 w-3.5" />
+              <Award className="h-3.5 w-3.5 text-amber-500" />
               Certificate Studio
             </button>
             <button
@@ -309,23 +339,119 @@ export default function CampaignsPage() {
           )}
         </motion.div>
       ) : activeTab === 'certificate_studio' ? (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          {campaigns.length > 1 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {selectedCampaignId}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
+                <select
+                  value={selectedCampaignId}
+                  onChange={(e) => {
+                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
+                    if (c) {
+                      setSelectedCampaignId(c.id || c.campaign_id)
+                      setSelectedCampaignName(c.name || c.campaign_name)
+                    }
+                  }}
+                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
+                >
+                  {campaigns.map((c) => (
+                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
+                      {c.name || c.campaign_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
           <CertificateStudio
+            key={selectedCampaignId}
             campaignId={selectedCampaignId || 'default_campaign'}
             campaignName={selectedCampaignName || 'Certificate Campaign'}
             onSwitchToEmail={() => setActiveTab('email_distributor')}
           />
         </motion.div>
       ) : activeTab === 'google_forms' ? (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          {campaigns.length > 1 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {selectedCampaignId}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
+                <select
+                  value={selectedCampaignId}
+                  onChange={(e) => {
+                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
+                    if (c) {
+                      setSelectedCampaignId(c.id || c.campaign_id)
+                      setSelectedCampaignName(c.name || c.campaign_name)
+                    }
+                  }}
+                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
+                >
+                  {campaigns.map((c) => (
+                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
+                      {c.name || c.campaign_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
           <GoogleFormsIntegration
+            key={selectedCampaignId}
             campaignId={selectedCampaignId || 'default_campaign'}
             campaignName={selectedCampaignName || 'Certificate Campaign'}
           />
         </motion.div>
       ) : (
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          {campaigns.length > 1 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  {selectedCampaignId}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
+                <select
+                  value={selectedCampaignId}
+                  onChange={(e) => {
+                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
+                    if (c) {
+                      setSelectedCampaignId(c.id || c.campaign_id)
+                      setSelectedCampaignName(c.name || c.campaign_name)
+                    }
+                  }}
+                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
+                >
+                  {campaigns.map((c) => (
+                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
+                      {c.name || c.campaign_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
           <CampaignEmailComposer
+            key={selectedCampaignId}
             campaignId={selectedCampaignId || 'default_campaign'}
             campaignName={selectedCampaignName || 'Certificate Campaign'}
           />

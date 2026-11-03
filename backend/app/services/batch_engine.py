@@ -79,7 +79,8 @@ class BatchProcessingEngine:
             raise ValueError(f"Campaign {campaign_id} not found or access denied.")
 
         # 2. Verify Gmail connection
-        conn = firestore_service.get_gmail_connection(user_id)
+        owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id
+        conn = firestore_service.get_gmail_connection(owner_id)
         if not conn or not conn.get("is_connected"):
             raise GmailNotConnectedError("You must connect your Gmail account in Settings before sending campaign emails.")
 
@@ -195,7 +196,8 @@ class BatchProcessingEngine:
                     break
 
                 # 3. Check sender Gmail connection
-                conn = firestore_service.get_gmail_connection(user_id)
+                owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id
+                conn = firestore_service.get_gmail_connection(owner_id)
                 if not conn or not conn.get("is_connected"):
                     log.warning("Sender Gmail disconnected, pausing campaign job", user_id=user_id, job_id=job_id)
                     firestore_service.release_job_lease(job_id, lease_id, new_status="paused")
@@ -495,7 +497,7 @@ class BatchProcessingEngine:
     # ─── Campaign Controls: Pause, Resume, Cancel, Retry ──────────────────────
 
     @classmethod
-    async def pause_campaign(cls, user_id: str, campaign_id: str) -> Dict[str, Any]:
+    async def pause_campaign(cls, user_id: Optional[str], campaign_id: str) -> Dict[str, Any]:
         """Pause ongoing email distribution for a campaign."""
         camp = firestore_service.get_campaign(campaign_id, user_id=user_id)
         if not camp:
@@ -514,13 +516,14 @@ class BatchProcessingEngine:
         return {"campaign_id": campaign_id, "status": "paused", "message": "Campaign sending has been paused."}
 
     @classmethod
-    async def resume_campaign(cls, user_id: str, campaign_id: str) -> Dict[str, Any]:
+    async def resume_campaign(cls, user_id: Optional[str], campaign_id: str) -> Dict[str, Any]:
         """Resume a paused campaign."""
         camp = firestore_service.get_campaign(campaign_id, user_id=user_id)
         if not camp:
             raise ValueError(f"Campaign {campaign_id} not found or access denied.")
 
-        conn = firestore_service.get_gmail_connection(user_id)
+        owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id
+        conn = firestore_service.get_gmail_connection(owner_id)
         if not conn or not conn.get("is_connected"):
             raise GmailNotConnectedError("Cannot resume campaign: Gmail account is not connected.")
 
@@ -538,7 +541,7 @@ class BatchProcessingEngine:
         )
 
     @classmethod
-    async def cancel_campaign(cls, user_id: str, campaign_id: str) -> Dict[str, Any]:
+    async def cancel_campaign(cls, user_id: Optional[str], campaign_id: str) -> Dict[str, Any]:
         """Cancel a campaign and all its pending/queued recipients."""
         camp = firestore_service.get_campaign(campaign_id, user_id=user_id)
         if not camp:
@@ -582,7 +585,7 @@ class BatchProcessingEngine:
         return {"campaign_id": campaign_id, "status": "cancelled", "message": "Campaign has been cancelled."}
 
     @classmethod
-    async def retry_failed_recipients(cls, user_id: str, campaign_id: str) -> Dict[str, Any]:
+    async def retry_failed_recipients(cls, user_id: Optional[str], campaign_id: str) -> Dict[str, Any]:
         """Reset eligible failed and unknown recipients to 'retrying' and restart processing."""
         camp = firestore_service.get_campaign(campaign_id, user_id=user_id)
         if not camp:

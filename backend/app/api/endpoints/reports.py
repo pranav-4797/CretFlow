@@ -47,7 +47,7 @@ async def get_campaign_report(
     current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Retrieve detailed distribution breakdown for a specific campaign."""
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -81,7 +81,7 @@ async def export_report(
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Export campaign participants and issuance data as a CSV download."""
-    campaign = firestore_service.get_campaign(campaign_id, user_id=current_user.uid)
+    campaign = firestore_service.get_campaign(campaign_id, user_id=None if current_user.is_admin else current_user.uid)
     if not campaign:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

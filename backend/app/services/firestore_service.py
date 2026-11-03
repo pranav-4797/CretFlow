@@ -693,7 +693,7 @@ class FirestoreService:
         return jobs
 
     @classmethod
-    def get_campaign_stats(cls, campaign_id: str, user_id: str) -> Dict[str, Any]:
+    def get_campaign_stats(cls, campaign_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Aggregate progress counts directly from the campaign document and fetch at most 10 recent logs (1-11 reads vs 500+)."""
         FirestoreMetrics.record_read("get_campaign_stats_call", 1)
         camp = cls.get_campaign(campaign_id, user_id)
