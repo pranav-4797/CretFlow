@@ -78,6 +78,7 @@ export function CampaignEmailComposer({
     fetchStatusAndStats()
     // Periodic refresh while in processing state (6s interval to conserve memory and network)
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
       if (campaignStats?.campaign_status === 'processing') {
         gmailService.getCampaignStatus(campaignId).then((res) => {
           if (res) setCampaignStats(res)

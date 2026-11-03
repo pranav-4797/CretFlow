@@ -170,6 +170,7 @@ class BatchProcessingEngine:
         log.info("Starting batch processing loop", job_id=job_id, campaign_id=campaign_id)
 
         try:
+            empty_attempts = 0
             while True:
                 # 1. Claim or renew atomic job lease
                 lease_id = firestore_service.claim_job_lease(job_id, lease_duration_seconds=cls.LEASE_DURATION_SECONDS)
@@ -216,8 +217,16 @@ class BatchProcessingEngine:
                 )
 
                 if not batch:
-                    # No more queued or retrying participants found.
-                    # Recalculate truthful counts directly from participant subcollection
+                    empty_attempts += 1
+                    if empty_attempts >= 3:
+                        summary = firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
+                        final_st = "completed" if summary.get("sent_count", 0) > 0 or summary.get("total_recipients", 0) == 0 else "failed"
+                        firestore_service.release_job_lease(job_id, lease_id, new_status=final_st)
+                        firestore_service.update_campaign(campaign_id, {"status": final_st, "completed_at": datetime.now(timezone.utc).isoformat()})
+                        log.info("Campaign batch processing finished completely", campaign_id=campaign_id, status=final_st)
+                        break
+
+                    firestore_service.reconcile_stuck_participants(campaign_id)
                     summary = firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
                     pending_count = summary.get("queued_count", 0) + summary.get("processing_count", 0)
 
@@ -228,13 +237,19 @@ class BatchProcessingEngine:
                         log.info("Campaign batch processing finished completely", campaign_id=campaign_id, status=final_st)
                         break
                     else:
-                        # Some participants might be retrying after backoff
                         firestore_service.release_job_lease(job_id, lease_id)
                         await asyncio.sleep(5.0)
                         continue
+                else:
+                    empty_attempts = 0
 
-                # 5. Process current batch with bounded concurrency
+                # 5. Process current batch with bounded concurrency and reused Gmail client
                 semaphore = asyncio.Semaphore(cls.CONCURRENCY_LIMIT)
+                gmail_client = None
+                try:
+                    gmail_client = GmailService.get_gmail_service(conn)
+                except Exception as ex:
+                    log.warning("Could not pre-initialize Gmail service client, will use per-send fallback", error=str(ex))
 
                 async def _process_single(participant: Dict[str, Any]) -> str:
                     async with semaphore:
@@ -244,6 +259,7 @@ class BatchProcessingEngine:
                             conn=conn,
                             subject_template=job_doc.get("subject_template", "Your Certificate") if job_doc else "Your Certificate",
                             body_template=job_doc.get("body_template", "") if job_doc else "",
+                            service=gmail_client,
                         )
                         await asyncio.sleep(cls.INTER_SEND_DELAY)
                         return res or "sent"
@@ -290,6 +306,7 @@ class BatchProcessingEngine:
         conn: Dict[str, Any],
         subject_template: str,
         body_template: str,
+        service: Optional[Any] = None,
     ) -> None:
         """Process email dispatch for an individual recipient."""
         campaign_id = campaign.get("campaign_id")
@@ -425,6 +442,7 @@ class BatchProcessingEngine:
                 body_html=body_html,
                 pdf_bytes=pdf_bytes,
                 pdf_filename=pdf_filename,
+                service=service,
             )
 
             message_id = result.get("message_id", "unknown_msg_id")

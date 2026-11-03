@@ -379,6 +379,12 @@ class GmailService:
         return msg
 
     @classmethod
+    def get_gmail_service(cls, conn: Dict[str, Any]) -> Any:
+        """Construct Google API client for Gmail service."""
+        creds = cls.get_google_credentials(conn)
+        return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+    @classmethod
     def send_email_sync(
         cls,
         conn: Dict[str, Any],
@@ -388,12 +394,14 @@ class GmailService:
         body_text: Optional[str] = None,
         pdf_bytes: Optional[bytes] = None,
         pdf_filename: Optional[str] = None,
+        service: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Synchronously send an email via Gmail API using users.messages.send.
+        Reuses an existing service client if provided, avoiding expensive per-message build() calls.
         """
-        creds = cls.get_google_credentials(conn)
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        if service is None:
+            service = cls.get_gmail_service(conn)
 
         mime_msg = cls.create_mime_message(
             sender_email=conn.get("google_email", "me"),

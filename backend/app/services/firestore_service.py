@@ -502,6 +502,7 @@ class FirestoreService:
                     if not include_pdf_bytes:
                         p.pop("certificate_bytes_b64", None)
                     participants.append(p)
+                FirestoreMetrics.record_read("get_campaign_participants", len(participants))
             except Exception:
                 camp_parts = _IN_MEMORY_PARTICIPANTS.get(campaign_id, {})
                 for p in camp_parts.values():
