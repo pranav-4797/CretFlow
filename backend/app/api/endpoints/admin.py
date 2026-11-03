@@ -17,6 +17,44 @@ log = structlog.get_logger(__name__)
 
 router = APIRouter()
 
+# In-memory user cache to avoid redundant Firebase Auth calls
+_USER_CACHE: Dict[str, Dict[str, Optional[str]]] = {}
+
+
+def resolve_user_profiles(uids: List[str]) -> Dict[str, Dict[str, Optional[str]]]:
+    """
+    Resolve human-readable display names and emails for a list of Firebase UIDs.
+    Uses an in-memory cache to ensure instant, zero-cost resolution on subsequent calls.
+    """
+    needed = [u for u in set(uids) if u and u not in _USER_CACHE and u != "Unknown"]
+    if needed:
+        try:
+            from firebase_admin import auth as fb_auth
+
+            # Batch lookup in chunks of 100 as supported by Firebase Admin SDK
+            for i in range(0, len(needed), 100):
+                chunk = needed[i : i + 100]
+                res = fb_auth.get_users([fb_auth.UidIdentifier(u) for u in chunk])
+                for u in res.users:
+                    display = u.display_name
+                    if not display and u.email:
+                        display = u.email.split("@")[0].replace(".", " ").title()
+                    _USER_CACHE[u.uid] = {
+                        "name": display or "Organizer",
+                        "email": u.email,
+                    }
+        except Exception as exc:
+            log.warning("Failed to batch resolve user profiles from Firebase Auth", error=str(exc))
+
+    result: Dict[str, Dict[str, Optional[str]]] = {}
+    for uid in uids:
+        cached = _USER_CACHE.get(uid)
+        if cached:
+            result[uid] = cached
+        else:
+            result[uid] = {"name": "Organizer", "email": None}
+    return result
+
 
 class AdminOverviewResponse(BaseModel):
     total_campaigns: int
@@ -34,6 +72,8 @@ class AdminCampaignItem(BaseModel):
     name: str
     campaign_name: str
     owner_uid: str
+    owner_name: str = "Organizer"
+    owner_email: Optional[str] = None
     status: str
     total_recipients: int
     sent_count: int
@@ -52,11 +92,11 @@ async def get_admin_overview(
     Only accessible by Super Admins (admin@gmail.com).
     """
     all_campaigns = firestore_service.list_all_campaigns(limit=500)
-    
+
     total_participants = sum(int(c.get("total_recipients") or 0) for c in all_campaigns)
     total_sent = sum(int(c.get("sent_count") or 0) for c in all_campaigns)
     total_failed = sum(int(c.get("failed_count") or 0) for c in all_campaigns)
-    
+
     distinct_owners = {c.get("owner_uid") or c.get("userId") for c in all_campaigns if c.get("owner_uid") or c.get("userId")}
 
     return AdminOverviewResponse(
@@ -77,14 +117,18 @@ async def get_admin_campaigns(
     admin: AuthenticatedUser = Depends(require_admin),
 ) -> List[AdminCampaignItem]:
     """
-    List all campaigns across every organizer on the platform.
+    List all campaigns across every organizer on the platform with human-readable owner names.
     """
     campaigns = firestore_service.list_all_campaigns(limit=limit, user_id_filter=user_id_filter)
+    uids = [str(c.get("owner_uid") or c.get("userId") or "") for c in campaigns]
+    user_map = resolve_user_profiles(uids)
+
     results = []
     for c in campaigns:
         c_id = str(c.get("campaign_id") or c.get("id") or "")
         c_name = str(c.get("campaign_name") or c.get("name") or "Untitled")
         owner = str(c.get("owner_uid") or c.get("userId") or "Unknown")
+        user_info = user_map.get(owner, {"name": "Organizer", "email": None})
         results.append(
             AdminCampaignItem(
                 id=c_id,
@@ -92,6 +136,8 @@ async def get_admin_campaigns(
                 name=c_name,
                 campaign_name=c_name,
                 owner_uid=owner,
+                owner_name=user_info.get("name") or "Organizer",
+                owner_email=user_info.get("email"),
                 status=str(c.get("status") or "draft"),
                 total_recipients=int(c.get("total_recipients") or 0),
                 sent_count=int(c.get("sent_count") or 0),

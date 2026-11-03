@@ -44,6 +44,8 @@ interface AdminCampaign {
   name: string
   campaign_name: string
   owner_uid: string
+  owner_name: string
+  owner_email?: string
   status: string
   total_recipients: number
   sent_count: number
@@ -134,15 +136,21 @@ export default function AdminPage() {
     })
   }
 
-  // Distinct owners for filtering
-  const distinctOwners = useMemo(() => {
-    const set = new Set<string>()
+  // Distinct organizers for filtering with human names & emails
+  const distinctOrganizers = useMemo(() => {
+    const map = new Map<string, { uid: string; name: string; email?: string }>()
     campaigns.forEach((c) => {
       if (c.owner_uid && c.owner_uid !== 'Unknown') {
-        set.add(c.owner_uid)
+        if (!map.has(c.owner_uid)) {
+          map.set(c.owner_uid, {
+            uid: c.owner_uid,
+            name: c.owner_name || 'Organizer',
+            email: c.owner_email,
+          })
+        }
       }
     })
-    return Array.from(set)
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [campaigns])
 
   // Filtered campaigns
@@ -150,10 +158,17 @@ export default function AdminPage() {
     return campaigns.filter((c) => {
       const name = (c.name || c.campaign_name || '').toLowerCase()
       const cid = (c.id || c.campaign_id || '').toLowerCase()
-      const owner = (c.owner_uid || '').toLowerCase()
+      const ownerName = (c.owner_name || '').toLowerCase()
+      const ownerEmail = (c.owner_email || '').toLowerCase()
       const q = searchQuery.toLowerCase().trim()
 
-      const matchesSearch = !q || name.includes(q) || cid.includes(q) || owner.includes(q)
+      const matchesSearch =
+        !q ||
+        name.includes(q) ||
+        cid.includes(q) ||
+        ownerName.includes(q) ||
+        ownerEmail.includes(q)
+
       const matchesType = typeFilter === 'all' || (c.campaign_type || 'spreadsheet') === typeFilter
       const matchesStatus = statusFilter === 'all' || (c.status || 'draft').toLowerCase() === statusFilter
       const matchesOwner = selectedOwner === 'all' || c.owner_uid === selectedOwner
@@ -380,7 +395,7 @@ export default function AdminPage() {
           <div>
             <h2 className="text-xl font-bold tracking-tight">Platform-Wide Campaigns</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Super Admin master controls — inspect, manage, and delete any campaign across all platform tenants.
+              Super Admin master controls — inspect, manage, and delete any campaign across all platform organizers.
             </p>
           </div>
           <div className="text-xs font-medium text-muted-foreground">
@@ -391,11 +406,11 @@ export default function AdminPage() {
         {/* Filters and Controls */}
         <div className="flex flex-wrap items-center gap-3 bg-muted/30 p-3.5 rounded-xl border border-border/50">
           {/* Search Input */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-[240px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search by name, ID, or owner UID..."
+              placeholder="Search by campaign name, organizer, or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 text-xs bg-background"
@@ -455,19 +470,19 @@ export default function AdminPage() {
             ))}
           </div>
 
-          {/* Owner Filter */}
-          {distinctOwners.length > 1 && (
+          {/* Organizer Filter */}
+          {distinctOrganizers.length > 0 && (
             <div className="flex items-center gap-1.5 bg-background p-1 rounded-lg border border-border/60">
-              <span className="text-[11px] font-medium text-muted-foreground px-2">Owner:</span>
+              <span className="text-[11px] font-medium text-muted-foreground px-2">Organizer:</span>
               <select
                 value={selectedOwner}
                 onChange={(e) => setSelectedOwner(e.target.value)}
-                className="bg-transparent text-xs py-1 px-2 rounded focus:outline-none"
+                className="bg-transparent text-xs py-1 px-2 rounded focus:outline-none max-w-[220px]"
               >
                 <option value="all">All Organizers</option>
-                {distinctOwners.map((owner) => (
-                  <option key={owner} value={owner}>
-                    {owner.length > 16 ? `${owner.slice(0, 14)}...` : owner}
+                {distinctOrganizers.map((org) => (
+                  <option key={org.uid} value={org.uid}>
+                    {org.name} {org.email ? `(${org.email})` : ''}
                   </option>
                 ))}
               </select>
@@ -482,7 +497,7 @@ export default function AdminPage() {
               <thead>
                 <tr className="border-b border-border/60 bg-muted/40 font-semibold text-muted-foreground">
                   <th className="py-3 px-4">Campaign Name & ID</th>
-                  <th className="py-3 px-4">Owner UID</th>
+                  <th className="py-3 px-4">Organizer</th>
                   <th className="py-3 px-4">Type</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Delivery Progress</th>
@@ -519,14 +534,22 @@ export default function AdminPage() {
                             {cid}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-[11px] text-muted-foreground">
-                          <span
-                            className="bg-muted px-1.5 py-0.5 rounded cursor-pointer hover:text-foreground"
-                            title={`Filter by owner: ${c.owner_uid}`}
+                        <td className="py-3.5 px-4">
+                          <button
+                            type="button"
+                            className="text-left group focus:outline-none"
+                            title={`Filter campaigns by ${c.owner_name}`}
                             onClick={() => setSelectedOwner(c.owner_uid)}
                           >
-                            {c.owner_uid.length > 14 ? `${c.owner_uid.slice(0, 12)}...` : c.owner_uid}
-                          </span>
+                            <div className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {c.owner_name || 'Organizer'}
+                            </div>
+                            {c.owner_email && (
+                              <div className="text-[11px] text-muted-foreground truncate max-w-[220px]">
+                                {c.owner_email}
+                              </div>
+                            )}
+                          </button>
                         </td>
                         <td className="py-3.5 px-4">
                           {isGoogleForm ? (
