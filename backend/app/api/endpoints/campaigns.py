@@ -34,6 +34,18 @@ async def list_campaigns(
     """
     if all_users and current_user.is_admin:
         campaigns = firestore_service.list_all_campaigns(limit=limit)
+        try:
+            from app.api.endpoints.admin import resolve_user_profiles
+            uids = [str(c.get("owner_uid") or c.get("userId") or "") for c in campaigns]
+            user_map = resolve_user_profiles(uids)
+            for c in campaigns:
+                owner = str(c.get("owner_uid") or c.get("userId") or "Unknown")
+                info = user_map.get(owner)
+                if info:
+                    c["owner_name"] = info.get("name")
+                    c["owner_email"] = info.get("email")
+        except Exception as e:
+            log.warning("Could not enrich campaigns with user profiles", error=str(e))
     else:
         campaigns = firestore_service.list_campaigns(current_user.uid, limit=limit)
     return [CampaignResponse.model_validate(c) for c in campaigns]
@@ -89,6 +101,17 @@ async def get_campaign(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campaign not found or access denied.",
         )
+    if current_user.is_admin:
+        try:
+            from app.api.endpoints.admin import resolve_user_profiles
+            owner = str(camp.get("owner_uid") or camp.get("userId") or "")
+            if owner:
+                info = resolve_user_profiles([owner]).get(owner)
+                if info:
+                    camp["owner_name"] = info.get("name")
+                    camp["owner_email"] = info.get("email")
+        except Exception:
+            pass
     return CampaignResponse.model_validate(camp)
 
 

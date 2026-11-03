@@ -77,18 +77,38 @@ export function CertificateStudio({ campaignId, campaignName, onSwitchToEmail }:
 
   // Load existing template data
   const loadTemplate = async () => {
+    if (!campaignId || campaignId === 'default_campaign') {
+      setLoading(false)
+      return
+    }
     try {
       setLoading(true)
       const res = await templateService.getTemplate(campaignId)
       setTemplateData(res)
+      const activeConfig = res.config ? { ...config, ...res.config } : config
       if (res.config) {
         setConfig((prev) => ({ ...prev, ...res.config }))
       }
-      if (res.template_image_url) {
-        setLivePreviewUrl(res.template_image_url)
+      if (res.has_template) {
+        if (res.template_image_url) {
+          setLivePreviewUrl(res.template_image_url)
+        }
+        // Seamlessly generate preview with recipient name overlay
+        try {
+          const prevRes = await templateService.previewTemplate(campaignId, sampleName, activeConfig)
+          if (prevRes?.preview_data_url) {
+            setLivePreviewUrl(prevRes.preview_data_url)
+          }
+        } catch (prevErr) {
+          console.warn('Could not generate live preview on load, showing background template:', prevErr)
+        }
+      } else {
+        setLivePreviewUrl(null)
       }
     } catch (err: any) {
       console.warn('No existing template loaded:', err)
+      setTemplateData(null)
+      setLivePreviewUrl(null)
     } finally {
       setLoading(false)
     }

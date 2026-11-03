@@ -67,6 +67,8 @@ class CampaignResponse(BaseModel):
     campaign_id: str
     user_id: str
     owner_uid: str
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
     name: str
     campaign_name: str
     description: Optional[str] = None

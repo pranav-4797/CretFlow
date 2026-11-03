@@ -37,11 +37,13 @@ interface Campaign {
   total_recipients: number
   sent_count: number
   created_at?: string
+  owner_name?: string
+  owner_email?: string
 }
 
 export default function CampaignsPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
   const initialId = searchParams.get('id')
 
@@ -61,12 +63,39 @@ export default function CampaignsPage() {
     if (selectedCampaignId === deletedId) {
       const remaining = campaigns.filter((c) => (c.id || c.campaign_id) !== deletedId)
       if (remaining.length > 0) {
-        setSelectedCampaignId(remaining[0].id || remaining[0].campaign_id)
+        const nextId = remaining[0].id || remaining[0].campaign_id
+        setSelectedCampaignId(nextId)
         setSelectedCampaignName(remaining[0].name || remaining[0].campaign_name)
+        if (activeTab !== 'campaigns') {
+          setSearchParams({ tab: activeTab, id: nextId })
+        }
       } else {
         setSelectedCampaignId('')
         setSelectedCampaignName('')
       }
+    }
+  }
+
+  const handleSelectCampaign = (cid: string) => {
+    const c = campaigns.find((x) => (x.id || x.campaign_id) === cid)
+    if (c) {
+      const realId = c.id || c.campaign_id
+      setSelectedCampaignId(realId)
+      setSelectedCampaignName(c.name || c.campaign_name)
+      if (activeTab !== 'campaigns') {
+        setSearchParams({ tab: activeTab, id: realId })
+      }
+    }
+  }
+
+  const handleTabChange = (tab: 'campaigns' | 'certificate_studio' | 'google_forms' | 'email_distributor') => {
+    setActiveTab(tab)
+    if (tab === 'campaigns') {
+      setSearchParams({})
+    } else if (selectedCampaignId) {
+      setSearchParams({ tab, id: selectedCampaignId })
+    } else {
+      setSearchParams({ tab })
     }
   }
 
@@ -95,8 +124,12 @@ export default function CampaignsPage() {
         if (list.length > 0) {
           const matched = initialId ? list.find((c) => (c.id || c.campaign_id) === initialId) : null
           const target = matched || list[0]
-          setSelectedCampaignId(target.id || target.campaign_id)
+          const targetId = target.id || target.campaign_id
+          setSelectedCampaignId(targetId)
           setSelectedCampaignName(target.name || target.campaign_name)
+          if (initialTab && initialTab !== 'campaigns') {
+            setSearchParams({ tab: initialTab, id: targetId }, { replace: true })
+          }
         }
       } catch (err) {
         console.warn('Could not load campaigns list:', err)
@@ -107,7 +140,7 @@ export default function CampaignsPage() {
     loadCampaigns()
   }, [initialId, user?.isAdmin])
 
-  // Sync tab and ID if URL parameters change
+  // Sync tab and ID if URL parameters change from outside
   useEffect(() => {
     if (initialTab && ['campaigns', 'certificate_studio', 'email_distributor', 'google_forms'].includes(initialTab)) {
       setActiveTab(initialTab as any)
@@ -119,24 +152,30 @@ export default function CampaignsPage() {
         setSelectedCampaignName(matched.name || matched.campaign_name)
       }
     }
-  }, [initialTab, initialId, campaigns])
+  }, [initialTab, initialId])
 
   const handleOpenDistributor = (campaign: Campaign) => {
-    setSelectedCampaignId(campaign.id || campaign.campaign_id)
+    const cid = campaign.id || campaign.campaign_id
+    setSelectedCampaignId(cid)
     setSelectedCampaignName(campaign.name || campaign.campaign_name)
     setActiveTab('email_distributor')
+    setSearchParams({ tab: 'email_distributor', id: cid })
   }
 
   const handleOpenStudio = (campaign: Campaign) => {
-    setSelectedCampaignId(campaign.id || campaign.campaign_id)
+    const cid = campaign.id || campaign.campaign_id
+    setSelectedCampaignId(cid)
     setSelectedCampaignName(campaign.name || campaign.campaign_name)
     setActiveTab('certificate_studio')
+    setSearchParams({ tab: 'certificate_studio', id: cid })
   }
 
   const handleOpenForms = (campaign: Campaign) => {
-    setSelectedCampaignId(campaign.id || campaign.campaign_id)
+    const cid = campaign.id || campaign.campaign_id
+    setSelectedCampaignId(cid)
     setSelectedCampaignName(campaign.name || campaign.campaign_name)
     setActiveTab('google_forms')
+    setSearchParams({ tab: 'google_forms', id: cid })
   }
 
   return (
@@ -151,7 +190,7 @@ export default function CampaignsPage() {
           {/* View switcher */}
           <div className="flex rounded-lg border bg-muted/40 p-1 text-xs">
             <button
-              onClick={() => setActiveTab('campaigns')}
+              onClick={() => handleTabChange('campaigns')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
                 activeTab === 'campaigns'
                   ? 'bg-background shadow-xs text-foreground'
@@ -162,7 +201,7 @@ export default function CampaignsPage() {
               Campaigns
             </button>
             <button
-              onClick={() => setActiveTab('certificate_studio')}
+              onClick={() => handleTabChange('certificate_studio')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
                 activeTab === 'certificate_studio'
                   ? 'bg-background shadow-xs text-foreground'
@@ -173,7 +212,7 @@ export default function CampaignsPage() {
               Certificate Studio
             </button>
             <button
-              onClick={() => setActiveTab('google_forms')}
+              onClick={() => handleTabChange('google_forms')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
                 activeTab === 'google_forms'
                   ? 'bg-background shadow-xs text-foreground'
@@ -184,7 +223,7 @@ export default function CampaignsPage() {
               Forms Quiz
             </button>
             <button
-              onClick={() => setActiveTab('email_distributor')}
+              onClick={() => handleTabChange('email_distributor')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${
                 activeTab === 'email_distributor'
                   ? 'bg-background shadow-xs text-foreground'
@@ -221,7 +260,14 @@ export default function CampaignsPage() {
                   <Card key={cId} className="hover:border-primary/50 transition-all shadow-xs flex flex-col justify-between">
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base font-semibold leading-tight line-clamp-1">{cName}</CardTitle>
+                        <div>
+                          <CardTitle className="text-base font-semibold leading-tight line-clamp-1">{cName}</CardTitle>
+                          {camp.owner_name && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              Organizer: <span className="font-medium text-foreground">{camp.owner_name}</span>
+                            </p>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {camp.campaign_type === 'google_forms' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800">
@@ -340,121 +386,160 @@ export default function CampaignsPage() {
         </motion.div>
       ) : activeTab === 'certificate_studio' ? (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          {campaigns.length > 1 && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
-                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
-                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {selectedCampaignId}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => {
-                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
-                    if (c) {
-                      setSelectedCampaignId(c.id || c.campaign_id)
-                      setSelectedCampaignName(c.name || c.campaign_name)
-                    }
-                  }}
-                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
-                >
-                  {campaigns.map((c) => (
-                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
-                      {c.name || c.campaign_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs font-medium">Loading campaign and certificate template...</span>
             </div>
+          ) : (
+            <>
+              {campaigns.length > 1 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                    <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                    {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name && (
+                      <span className="text-xs text-primary font-medium">
+                        by {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name}
+                      </span>
+                    )}
+                    <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {selectedCampaignId}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Switch Campaign:</span>
+                    <select
+                      value={selectedCampaignId}
+                      onChange={(e) => handleSelectCampaign(e.target.value)}
+                      className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none max-w-[280px]"
+                    >
+                      {campaigns.map((c) => {
+                        const cid = c.id || c.campaign_id
+                        const cname = c.name || c.campaign_name
+                        const label = c.owner_name && c.owner_name !== 'Organizer' ? `${cname} (${c.owner_name})` : cname
+                        return (
+                          <option key={cid} value={cid}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <CertificateStudio
+                key={selectedCampaignId}
+                campaignId={selectedCampaignId}
+                campaignName={selectedCampaignName || 'Certificate Campaign'}
+                onSwitchToEmail={() => handleTabChange('email_distributor')}
+              />
+            </>
           )}
-          <CertificateStudio
-            key={selectedCampaignId}
-            campaignId={selectedCampaignId || 'default_campaign'}
-            campaignName={selectedCampaignName || 'Certificate Campaign'}
-            onSwitchToEmail={() => setActiveTab('email_distributor')}
-          />
         </motion.div>
       ) : activeTab === 'google_forms' ? (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          {campaigns.length > 1 && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
-                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
-                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {selectedCampaignId}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => {
-                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
-                    if (c) {
-                      setSelectedCampaignId(c.id || c.campaign_id)
-                      setSelectedCampaignName(c.name || c.campaign_name)
-                    }
-                  }}
-                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
-                >
-                  {campaigns.map((c) => (
-                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
-                      {c.name || c.campaign_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs font-medium">Loading form details...</span>
             </div>
+          ) : (
+            <>
+              {campaigns.length > 1 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                    <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                    {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name && (
+                      <span className="text-xs text-primary font-medium">
+                        by {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name}
+                      </span>
+                    )}
+                    <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {selectedCampaignId}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Switch Campaign:</span>
+                    <select
+                      value={selectedCampaignId}
+                      onChange={(e) => handleSelectCampaign(e.target.value)}
+                      className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none max-w-[280px]"
+                    >
+                      {campaigns.map((c) => {
+                        const cid = c.id || c.campaign_id
+                        const cname = c.name || c.campaign_name
+                        const label = c.owner_name && c.owner_name !== 'Organizer' ? `${cname} (${c.owner_name})` : cname
+                        return (
+                          <option key={cid} value={cid}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <GoogleFormsIntegration
+                key={selectedCampaignId}
+                campaignId={selectedCampaignId}
+                campaignName={selectedCampaignName || 'Certificate Campaign'}
+              />
+            </>
           )}
-          <GoogleFormsIntegration
-            key={selectedCampaignId}
-            campaignId={selectedCampaignId || 'default_campaign'}
-            campaignName={selectedCampaignName || 'Certificate Campaign'}
-          />
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          {campaigns.length > 1 && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
-                <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
-                <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {selectedCampaignId}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Switch Campaign:</span>
-                <select
-                  value={selectedCampaignId}
-                  onChange={(e) => {
-                    const c = campaigns.find((x) => (x.id || x.campaign_id) === e.target.value)
-                    if (c) {
-                      setSelectedCampaignId(c.id || c.campaign_id)
-                      setSelectedCampaignName(c.name || c.campaign_name)
-                    }
-                  }}
-                  className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none"
-                >
-                  {campaigns.map((c) => (
-                    <option key={c.id || c.campaign_id} value={c.id || c.campaign_id}>
-                      {c.name || c.campaign_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-xs font-medium">Loading distribution details...</span>
             </div>
+          ) : (
+            <>
+              {campaigns.length > 1 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3.5 rounded-xl border border-border/60">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground">Active Campaign:</span>
+                    <span className="text-sm font-bold text-foreground">{selectedCampaignName || 'Untitled'}</span>
+                    {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name && (
+                      <span className="text-xs text-primary font-medium">
+                        by {campaigns.find((x) => (x.id || x.campaign_id) === selectedCampaignId)?.owner_name}
+                      </span>
+                    )}
+                    <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {selectedCampaignId}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Switch Campaign:</span>
+                    <select
+                      value={selectedCampaignId}
+                      onChange={(e) => handleSelectCampaign(e.target.value)}
+                      className="bg-background text-xs py-1.5 px-3 rounded-lg border border-border focus:outline-none max-w-[280px]"
+                    >
+                      {campaigns.map((c) => {
+                        const cid = c.id || c.campaign_id
+                        const cname = c.name || c.campaign_name
+                        const label = c.owner_name && c.owner_name !== 'Organizer' ? `${cname} (${c.owner_name})` : cname
+                        return (
+                          <option key={cid} value={cid}>
+                            {label}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <CampaignEmailComposer
+                key={selectedCampaignId}
+                campaignId={selectedCampaignId}
+                campaignName={selectedCampaignName || 'Certificate Campaign'}
+              />
+            </>
           )}
-          <CampaignEmailComposer
-            key={selectedCampaignId}
-            campaignId={selectedCampaignId || 'default_campaign'}
-            campaignName={selectedCampaignName || 'Certificate Campaign'}
-          />
         </motion.div>
       )}
 

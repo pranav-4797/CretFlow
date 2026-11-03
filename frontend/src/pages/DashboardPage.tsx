@@ -308,7 +308,7 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      <Link to="/campaigns" className="w-full">
+                      <Link to={`/campaigns?id=${cId}`} className="w-full">
                         <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs h-8">
                           Manage Campaign
                           <ArrowRight className="h-3 w-3" />
