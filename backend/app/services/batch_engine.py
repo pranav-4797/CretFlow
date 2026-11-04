@@ -63,7 +63,7 @@ class BatchProcessingEngine:
     @classmethod
     async def start_campaign_job(
         cls,
-        user_id: str,
+        user_id: Optional[str],
         campaign_id: str,
         subject_template: str = "Your Certificate",
         body_template: Optional[str] = None,
@@ -79,7 +79,7 @@ class BatchProcessingEngine:
             raise ValueError(f"Campaign {campaign_id} not found or access denied.")
 
         # 2. Verify Gmail connection
-        owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id
+        owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id or ""
         conn = firestore_service.get_gmail_connection(owner_id)
         if not conn or not conn.get("is_connected"):
             raise GmailNotConnectedError("You must connect your Gmail account in Settings before sending campaign emails.")
@@ -91,7 +91,7 @@ class BatchProcessingEngine:
             job_id = existing_job["job_id"]
             log.info("Campaign already has an active job, resuming/ensuring task is running", campaign_id=campaign_id, job_id=job_id)
             if job_id not in _ACTIVE_BACKGROUND_TASKS or _ACTIVE_BACKGROUND_TASKS[job_id].done():
-                task = asyncio.create_task(cls._process_campaign_job_loop(job_id, campaign_id, user_id))
+                task = asyncio.create_task(cls._process_campaign_job_loop(job_id, campaign_id, owner_id))
                 _ACTIVE_BACKGROUND_TASKS[job_id] = task
             return {
                 "job_id": job_id,
@@ -123,7 +123,7 @@ class BatchProcessingEngine:
         job = firestore_service.create_email_job(
             job_id=job_id,
             campaign_id=campaign_id,
-            owner_uid=user_id,
+            owner_uid=owner_id,
             total_recipients=total_recipients,
             batch_size=batch_size,
             subject_template=subject_template,
@@ -142,7 +142,7 @@ class BatchProcessingEngine:
         )
 
         # 7. Spawn in-process background worker
-        task = asyncio.create_task(cls._process_campaign_job_loop(job_id, campaign_id, user_id))
+        task = asyncio.create_task(cls._process_campaign_job_loop(job_id, campaign_id, owner_id))
         _ACTIVE_BACKGROUND_TASKS[job_id] = task
 
         log.info(
@@ -540,7 +540,7 @@ class BatchProcessingEngine:
         if not camp:
             raise ValueError(f"Campaign {campaign_id} not found or access denied.")
 
-        owner_id = campaign.get("owner_uid") or campaign.get("userId") or user_id
+        owner_id = camp.get("owner_uid") or camp.get("userId") or user_id
         conn = firestore_service.get_gmail_connection(owner_id)
         if not conn or not conn.get("is_connected"):
             raise GmailNotConnectedError("Cannot resume campaign: Gmail account is not connected.")
