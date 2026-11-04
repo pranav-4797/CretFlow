@@ -55,9 +55,9 @@ class BatchProcessingEngine:
     """
 
     DEFAULT_BATCH_SIZE: int = 10
-    CONCURRENCY_LIMIT: int = 2
+    CONCURRENCY_LIMIT: int = 1         # Strictly sequential per-batch send eliminates SSL socket collisions
     LEASE_DURATION_SECONDS: int = 300  # 5 minutes
-    INTER_SEND_DELAY: float = 0.25     # 250ms between sends to protect Gmail quota
+    INTER_SEND_DELAY: float = 0.25     # 250ms between sends to protect Gmail quota (~4 emails/sec)
     MAX_ATTEMPTS: int = 3
 
     @classmethod

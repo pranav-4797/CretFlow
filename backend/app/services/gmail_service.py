@@ -26,6 +26,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 import structlog
+import threading
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -40,6 +41,9 @@ log = structlog.get_logger(__name__)
 # In-memory single-use nonce tracking with timestamp cleanup
 _USED_NONCES: Dict[str, float] = {}
 _NONCE_TTL_SECONDS = 600  # 10 minutes
+
+# Process-level thread lock for Gmail API network socket calls to prevent SSL record collisions
+_GMAIL_SEND_LOCK = threading.Lock()
 
 
 class GmailServiceError(Exception):
@@ -416,12 +420,13 @@ class GmailService:
         raw_b64 = base64.urlsafe_b64encode(mime_msg.as_bytes()).decode("ascii")
 
         try:
-            result = (
-                service.users()
-                .messages()
-                .send(userId="me", body={"raw": raw_b64})
-                .execute()
-            )
+            with _GMAIL_SEND_LOCK:
+                result = (
+                    service.users()
+                    .messages()
+                    .send(userId="me", body={"raw": raw_b64})
+                    .execute()
+                )
             # Update last used in Firestore
             user_id = conn.get("user_id")
             if user_id:
@@ -449,11 +454,46 @@ class GmailService:
                 is_transient=is_transient,
             )
         except Exception as e:
-            log.error("Unexpected error sending email via Gmail", error=str(e))
+            err_msg = str(e)
+            is_net_error = any(phrase in err_msg.lower() for phrase in [
+                "decryption failed", "bad record mac", "closed connection",
+                "connection reset", "broken pipe", "remote end closed",
+                "eof occurred", "handshake", "ssl", "timed out", "timeout"
+            ])
+            # If a socket/SSL glitch occurred on a shared/stale client, rebuild fresh client and retry once
+            if is_net_error and service is not None:
+                log.warning("Socket or SSL collision detected on Gmail client, rebuilding fresh client and retrying once", error=err_msg)
+                try:
+                    fresh_service = cls.get_gmail_service(conn)
+                    with _GMAIL_SEND_LOCK:
+                        result = (
+                            fresh_service.users()
+                            .messages()
+                            .send(userId="me", body={"raw": raw_b64})
+                            .execute()
+                        )
+                    user_id = conn.get("user_id")
+                    if user_id:
+                        firestore_service.update_gmail_last_used(user_id)
+                    return {
+                        "message_id": result.get("id"),
+                        "thread_id": result.get("threadId"),
+                        "sender": conn.get("google_email"),
+                        "recipient": to_email,
+                    }
+                except Exception as retry_err:
+                    log.error("Retry with fresh Gmail client also failed", error=str(retry_err))
+                    raise GmailServiceError(
+                        f"Transient connection failure: {str(retry_err)}",
+                        code="SEND_SOCKET_RETRY_FAILED",
+                        is_transient=True,
+                    )
+
+            log.error("Unexpected error sending email via Gmail", error=err_msg)
             raise GmailServiceError(
-                f"Unexpected error sending email: {str(e)}",
+                f"Unexpected error sending email: {err_msg}",
                 code="SEND_FAILED",
-                is_transient=False,
+                is_transient=is_net_error,
             )
 
     @classmethod
