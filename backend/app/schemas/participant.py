@@ -14,6 +14,8 @@ class ParticipantCreateRequest(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
     recipient_email: Optional[str] = None
     email: Optional[str] = None
+    certificate_id: Optional[str] = Field(None, max_length=50)
+    send_immediately: bool = Field(False, description="Send certificate PDF immediately via Gmail upon adding")
     variables: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -51,10 +53,12 @@ class ParticipantResponse(BaseModel):
     email_status: str = "queued"
     status: str = "queued"
     attempt_count: int = 0
+    certificate_id: Optional[str] = None
     gmail_message_id: Optional[str] = None
     certificate_drive_file_id: Optional[str] = None
     last_error_code: Optional[str] = None
     last_error_message: Optional[str] = None
+    variables: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     sent_at: Optional[str] = None
 
@@ -81,5 +85,6 @@ class ParticipantUploadResponse(BaseModel):
     campaign_id: str
     imported_count: int
     skipped_count: int
+    duplicates_skipped: int = 0
     total_recipients: int
     message: str

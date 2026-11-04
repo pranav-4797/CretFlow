@@ -142,3 +142,83 @@ async def test_participant_upload_validation_and_flow(client: AsyncClient, auth_
     emails = {p["email"] for p in participants}
     assert "alice@example.com" in emails
     assert "bob@example.com" in emails
+
+
+@pytest.mark.anyio
+async def test_roster_extension_deduplication(client: AsyncClient, auth_user: AuthenticatedUser):
+    """Test extending an existing campaign with another spreadsheet skips duplicate emails."""
+    camp = firestore_service.create_campaign({
+        "name": "Extension Test Campaign",
+        "user_id": auth_user.uid,
+    })
+    camp_id = camp["id"]
+
+    # Initial sheet
+    csv_1 = "Name,Email\nAlice Smith,alice@test.com\nBob Jones,bob@test.com\n".encode("utf-8")
+    res1 = await client.post(
+        f"/api/participants/{camp_id}/upload",
+        files={"file": ("batch1.csv", io.BytesIO(csv_1), "text/csv")},
+    )
+    assert res1.status_code == status.HTTP_200_OK
+    assert res1.json()["imported_count"] == 2
+    assert res1.json()["duplicates_skipped"] == 0
+
+    # Secondary extension sheet: contains Bob (existing) and Charlie (new) + duplicate row for Charlie
+    csv_2 = "Name,Email\nBob Jones,bob@test.com\nCharlie Brown,charlie@test.com\nCharlie Brown,charlie@test.com\n".encode("utf-8")
+    res2 = await client.post(
+        f"/api/participants/{camp_id}/upload",
+        files={"file": ("batch2.csv", io.BytesIO(csv_2), "text/csv")},
+    )
+    assert res2.status_code == status.HTTP_200_OK
+    data2 = res2.json()
+    assert data2["imported_count"] == 1  # Charlie only
+    assert data2["duplicates_skipped"] == 2  # 1 existing Bob + 1 within-file duplicate Charlie
+    assert data2["total_recipients"] == 3
+
+    # Verify campaign roster has exactly 3 participants
+    res_list = await client.get(f"/api/participants/{camp_id}")
+    assert res_list.status_code == status.HTTP_200_OK
+    participants = res_list.json()
+    assert len(participants) == 3
+    emails = {p["email"] for p in participants}
+    assert emails == {"alice@test.com", "bob@test.com", "charlie@test.com"}
+
+
+@pytest.mark.anyio
+async def test_add_single_participant_and_duplicate_prevention(client: AsyncClient, auth_user: AuthenticatedUser):
+    """Test manual single participant addition and duplicate email rejection."""
+    camp = firestore_service.create_campaign({
+        "name": "Manual Participant Test",
+        "user_id": auth_user.uid,
+    })
+    camp_id = camp["id"]
+
+    # 1. Add Dave
+    payload = {
+        "recipient_name": "Dave Miller",
+        "recipient_email": "dave@test.com",
+    }
+    res_add = await client.post(f"/api/participants/{camp_id}", json=payload)
+    assert res_add.status_code == status.HTTP_201_CREATED
+    dave = res_add.json()
+    assert dave["name"] == "Dave Miller"
+    assert dave["email"] == "dave@test.com"
+    dave_id = dave["id"]
+
+    # 2. Attempt duplicate add with same email
+    res_dup = await client.post(f"/api/participants/{camp_id}", json=payload)
+    assert res_dup.status_code == status.HTTP_409_CONFLICT
+    assert "already exists" in res_dup.json()["detail"]
+
+    # 3. Search participant
+    res_search = await client.get(f"/api/participants/{camp_id}?search=dave")
+    assert res_search.status_code == status.HTTP_200_OK
+    assert len(res_search.json()) == 1
+
+    # 4. Remove participant
+    res_del = await client.delete(f"/api/participants/{camp_id}/{dave_id}")
+    assert res_del.status_code == status.HTTP_200_OK
+
+    # 5. Verify gone
+    res_search_after = await client.get(f"/api/participants/{camp_id}?search=dave")
+    assert len(res_search_after.json()) == 0

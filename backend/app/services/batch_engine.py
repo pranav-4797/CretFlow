@@ -515,6 +515,74 @@ class BatchProcessingEngine:
     # ─── Campaign Controls: Pause, Resume, Cancel, Retry ──────────────────────
 
     @classmethod
+    async def send_single_participant_on_demand(
+        cls,
+        user_id: Optional[str],
+        campaign_id: str,
+        participant_id: str,
+        force_resend: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Send or resend a certificate email for an individual recipient immediately.
+        Executes on-the-fly certificate PDF generation and official Gmail API dispatch.
+        """
+        camp = firestore_service.get_campaign(campaign_id, user_id=user_id)
+        if not camp:
+            raise ValueError(f"Campaign {campaign_id} not found or access denied.")
+
+        part = firestore_service.get_participant(campaign_id, participant_id)
+        if not part:
+            raise ValueError(f"Participant {participant_id} not found in campaign {campaign_id}.")
+
+        owner_id = camp.get("owner_uid") or camp.get("userId") or user_id
+        conn = firestore_service.get_gmail_connection(owner_id)
+        if not conn or not conn.get("is_connected"):
+            raise GmailNotConnectedError("Cannot send certificate email: Gmail account is not connected.")
+
+        # If force resend or retrying from failed/cancelled status, reset status so idempotency allows dispatch
+        if force_resend or part.get("email_status") in ("sent", "failed", "cancelled"):
+            part["email_status"] = "queued"
+            firestore_service.update_participant(
+                campaign_id,
+                participant_id,
+                {
+                    "email_status": "queued",
+                    "last_error_code": None,
+                    "last_error_message": None,
+                },
+            )
+
+        service = GmailService.get_gmail_service(owner_id)
+        subject_template = camp.get("subject_template") or "Your Certificate for {{event_name}}"
+        body_template = camp.get("body_template") or ""
+
+        outcome = await cls._send_single_participant(
+            conn=conn,
+            campaign=camp,
+            participant=part,
+            subject_template=subject_template,
+            body_template=body_template,
+            service=service,
+        )
+
+        firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
+        updated_part = firestore_service.get_participant(campaign_id, participant_id) or part
+
+        is_success = outcome == "sent"
+        msg = (
+            f"Certificate email successfully sent to {part.get('recipient_email')}."
+            if is_success
+            else f"Delivery ended with status '{outcome}'. Reason: {updated_part.get('last_error_message') or 'Check participant details.'}"
+        )
+
+        return {
+            "success": is_success,
+            "status": outcome,
+            "participant": updated_part,
+            "message": msg,
+        }
+
+    @classmethod
     async def pause_campaign(cls, user_id: Optional[str], campaign_id: str) -> Dict[str, Any]:
         """Pause ongoing email distribution for a campaign."""
         camp = firestore_service.get_campaign(campaign_id, user_id=user_id)

@@ -527,6 +527,92 @@ class FirestoreService:
         return participants
 
     @classmethod
+    def get_campaign_participant_emails(cls, campaign_id: str) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch all participant emails in a campaign for high-performance deduplication.
+        Selects only minimal metadata fields to minimize bandwidth and memory.
+        Returns a dict mapping clean_email -> {"participant_id": id, "email_status": status, "recipient_name": name}.
+        """
+        client = cls._get_client()
+        email_map: Dict[str, Dict[str, Any]] = {}
+        if client:
+            try:
+                docs = (
+                    client.collection("campaigns")
+                    .document(campaign_id)
+                    .collection("participants")
+                    .select(["participant_id", "recipient_email", "email", "email_status", "status", "recipient_name", "name"])
+                    .stream()
+                )
+                for d in docs:
+                    p = d.to_dict()
+                    raw_email = str(p.get("recipient_email") or p.get("email") or "").strip().lower()
+                    if raw_email:
+                        email_map[raw_email] = {
+                            "participant_id": p.get("participant_id") or d.id,
+                            "email_status": p.get("email_status") or p.get("status") or "queued",
+                            "recipient_name": p.get("recipient_name") or p.get("name") or "",
+                        }
+            except Exception:
+                camp_parts = _IN_MEMORY_PARTICIPANTS.get(campaign_id, {})
+                for p_id, p in camp_parts.items():
+                    raw_email = str(p.get("recipient_email") or p.get("email") or "").strip().lower()
+                    if raw_email:
+                        email_map[raw_email] = {
+                            "participant_id": p.get("participant_id") or p_id,
+                            "email_status": p.get("email_status") or p.get("status") or "queued",
+                            "recipient_name": p.get("recipient_name") or p.get("name") or "",
+                        }
+        else:
+            camp_parts = _IN_MEMORY_PARTICIPANTS.get(campaign_id, {})
+            for p_id, p in camp_parts.items():
+                raw_email = str(p.get("recipient_email") or p.get("email") or "").strip().lower()
+                if raw_email:
+                    email_map[raw_email] = {
+                        "participant_id": p.get("participant_id") or p_id,
+                        "email_status": p.get("email_status") or p.get("status") or "queued",
+                        "recipient_name": p.get("recipient_name") or p.get("name") or "",
+                    }
+        return email_map
+
+    @classmethod
+    def get_participant(cls, campaign_id: str, participant_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a single participant document."""
+        client = cls._get_client()
+        if client:
+            try:
+                doc = (
+                    client.collection("campaigns")
+                    .document(campaign_id)
+                    .collection("participants")
+                    .document(participant_id)
+                    .get()
+                )
+                if doc.exists:
+                    p = doc.to_dict()
+                    p["id"] = doc.id
+                    p.setdefault("participant_id", doc.id)
+                    return p
+            except Exception:
+                pass
+        camp_parts = _IN_MEMORY_PARTICIPANTS.get(campaign_id, {})
+        return camp_parts.get(participant_id)
+
+    @classmethod
+    def delete_participant(cls, campaign_id: str, participant_id: str) -> bool:
+        """Delete a participant document and re-sync campaign stats."""
+        client = cls._get_client()
+        if client:
+            try:
+                client.collection("campaigns").document(campaign_id).collection("participants").document(participant_id).delete()
+            except Exception:
+                pass
+        if campaign_id in _IN_MEMORY_PARTICIPANTS and participant_id in _IN_MEMORY_PARTICIPANTS[campaign_id]:
+            del _IN_MEMORY_PARTICIPANTS[campaign_id][participant_id]
+        cls.recalculate_and_sync_campaign_counters(campaign_id)
+        return True
+
+    @classmethod
     def save_participant(cls, campaign_id: str, participant: Dict[str, Any]) -> Dict[str, Any]:
         """Save or update participant document inside campaign's participants subcollection."""
         p_id = participant.get("participant_id") or participant.get("id") or str(uuid.uuid4())

@@ -27,6 +27,7 @@ import {
   CampaignEmailStatus,
   SendPreviewResponse,
 } from '@/services/gmail'
+import { ParticipantRoster } from '@/components/campaigns/ParticipantRoster'
 
 interface CampaignEmailComposerProps {
   campaignId: string
@@ -262,7 +263,8 @@ export function CampaignEmailComposer({
   }
 
   return (
-    <Card className="border border-border/80 shadow-sm">
+    <div className="space-y-6">
+      <Card className="border border-border/80 shadow-sm">
       <CardHeader className="bg-muted/30 pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -406,6 +408,18 @@ export function CampaignEmailComposer({
                   >
                     <Play className="h-3 w-3" />
                     Resume
+                  </Button>
+                )}
+                {campaignStats.queued_count > 0 && campaignStats.campaign_status !== 'processing' && campaignStats.campaign_status !== 'paused' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResume}
+                    disabled={actionLoading}
+                    className="gap-1.5 text-xs h-7 text-primary border-primary/40 hover:bg-primary/5"
+                  >
+                    <Play className="h-3 w-3" />
+                    Distribute to {campaignStats.queued_count} Queued Recipient{campaignStats.queued_count > 1 ? 's' : ''}
                   </Button>
                 )}
                 {(campaignStats.campaign_status === 'processing' || campaignStats.campaign_status === 'paused') && (
@@ -688,5 +702,13 @@ export function CampaignEmailComposer({
         </AnimatePresence>
       </CardContent>
     </Card>
+
+    {/* Full Participant Roster with Search, Add Missing & Excel Extension */}
+    <ParticipantRoster
+      campaignId={campaignId}
+      campaignName={campaignName}
+      onRosterUpdated={handleReconcile}
+    />
+  </div>
   )
 }
