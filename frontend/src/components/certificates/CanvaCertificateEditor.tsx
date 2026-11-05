@@ -125,6 +125,11 @@ export function CanvaCertificateEditor({
     }
   }, [templateImageUrl])
 
+  const fieldsRef = useRef<CertificateField[]>(fields)
+  useEffect(() => {
+    fieldsRef.current = fields
+  }, [fields])
+
   // Dragging state
   const canvasRef = useRef<HTMLDivElement>(null)
   const draggingFieldIdRef = useRef<string | null>(null)
@@ -249,10 +254,7 @@ export function CanvaCertificateEditor({
       setIsSnappingCenter(false)
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
-      setFields((currentFields) => {
-        updateFields(currentFields)
-        return currentFields
-      })
+      updateFields(fieldsRef.current)
       draggingFieldIdRef.current = null
       dragStartPos.current = null
     }
@@ -289,9 +291,9 @@ export function CanvaCertificateEditor({
   return (
     <div className="space-y-4">
       {/* Canva Top Floating Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border bg-card/95 shadow-sm backdrop-blur">
+      <div className="relative z-30 flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border bg-card/95 shadow-sm backdrop-blur">
         {/* Left: Add Dynamic Field Dropdown */}
-        <div className="relative">
+        <div className="relative z-40">
           <Button
             type="button"
             variant="gradient"
@@ -487,7 +489,7 @@ export function CanvaCertificateEditor({
             </div>
 
             {/* Color Swatch / Picker Popover */}
-            <div className="relative">
+            <div className="relative z-40">
               <button
                 type="button"
                 onClick={() => setShowColorPicker(!showColorPicker)}
@@ -630,7 +632,7 @@ export function CanvaCertificateEditor({
               setShowAddMenu(false)
               setShowColorPicker(false)
             }}
-            className="relative w-full rounded-xl border border-border/80 shadow-md overflow-hidden select-none bg-zinc-900 group cursor-default [container-type:inline-size]"
+            className="relative z-10 w-full rounded-xl border border-border/80 shadow-md overflow-hidden select-none bg-zinc-900 group cursor-default [container-type:inline-size]"
             style={{ touchAction: 'none', containerType: 'inline-size' }}
           >
             {/* Background Template Image */}

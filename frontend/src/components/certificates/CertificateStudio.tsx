@@ -9,6 +9,7 @@ import {
   Eye,
   Send,
   FileCheck,
+  Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -130,11 +131,18 @@ export function CertificateStudio({ campaignId, campaignName, onSwitchToEmail }:
     }
   }
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+
   // Handle generating backend live preview (proof mode)
   const handleGenerateProof = async (overrideConfig?: TemplateConfig) => {
     const activeConfig = overrideConfig || config
     try {
       setPreviewLoading(true)
+      // Auto-save active configuration to Firestore so edits are never lost
+      await templateService.saveConfig(campaignId, activeConfig).catch((err) => {
+        console.warn('Could not auto-save config before generating proof:', err)
+      })
+
       const res = await templateService.previewTemplate(
         campaignId,
         sampleName,
@@ -152,6 +160,36 @@ export function CertificateStudio({ campaignId, campaignName, onSwitchToEmail }:
       setFeedback({ success: false, message: 'Could not generate preview proof.' })
     } finally {
       setPreviewLoading(false)
+    }
+  }
+
+  // Handle downloading actual sample PDF proof
+  const handleDownloadProofPdf = async () => {
+    try {
+      setDownloadingPdf(true)
+      const blob = await templateService.downloadSamplePdf(
+        campaignId,
+        sampleName,
+        config,
+        {
+          college: 'MIT Academy of Engineering',
+          rank: '1st Prize Winner',
+          event_name: campaignName,
+        }
+      )
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `certificate_proof_${campaignName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      console.error('Failed to download proof PDF:', err)
+      setFeedback({ success: false, message: 'Could not download certificate PDF.' })
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -328,25 +366,44 @@ export function CertificateStudio({ campaignId, campaignName, onSwitchToEmail }:
             ) : (
               /* Rendered Final PDF Proof View */
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-foreground flex items-center gap-1.5">
-                    <FileCheck className="h-4 w-4 text-emerald-600" />
-                    High-Resolution Server Pillow Render Proof
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setActiveViewMode('canva_editor')}
-                    className="text-xs h-7"
-                  >
-                    ← Back to Canva Editor
-                  </Button>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <FileCheck className="h-4 w-4 text-emerald-600" />
+                      Server Pillow Render Proof
+                    </span>
+                    <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                      Sample: {sampleName}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={handleDownloadProofPdf}
+                      disabled={downloadingPdf}
+                      className="text-xs h-7 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                    >
+                      {downloadingPdf ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+                      Download Sample PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveViewMode('canva_editor')}
+                      className="text-xs h-7 cursor-pointer"
+                    >
+                      ← Back to Canva Editor
+                    </Button>
+                  </div>
                 </div>
-                <div className="rounded-xl border bg-zinc-900 shadow-md p-2 flex items-center justify-center">
+
+                <div className="rounded-xl border bg-zinc-900 shadow-md p-2 flex items-center justify-center overflow-auto max-h-[750px]">
                   <img
                     src={livePreviewUrl || templateData.template_image_url}
                     alt="Proof Preview"
-                    className="w-full h-auto max-h-[600px] object-contain rounded-lg"
+                    className="w-full h-auto max-h-[720px] object-contain rounded-lg shadow-sm"
                   />
                 </div>
               </div>

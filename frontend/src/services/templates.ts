@@ -93,6 +93,19 @@ export const templateService = {
     }),
 
   /** Bulk generate certificates in Google Shared Drive */
+  /** Download sample proof PDF file */
+  downloadSamplePdf: (
+    campaignId: string,
+    sampleName: string,
+    config: TemplateConfig,
+    sampleVariables?: Record<string, any>
+  ): Promise<Blob> =>
+    api.postBlob(`/api/templates/${campaignId}/preview/pdf`, {
+      sample_name: sampleName,
+      sample_variables: sampleVariables || {},
+      config,
+    }),
+
   generateCertificates: (campaignId: string, overrideExisting: boolean = false) =>
     api.post<GenerateCertificatesResponse>(`/api/certificates/${campaignId}/generate`, {
       campaign_id: campaignId,

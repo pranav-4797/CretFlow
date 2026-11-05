@@ -249,3 +249,48 @@ def test_small_font_size_validation_and_rendering():
     img.close()
 
 
+@pytest.mark.anyio
+async def test_preview_certificate_pdf_endpoint(client: AsyncClient, auth_user: AuthenticatedUser):
+    """Verify POST /api/templates/{campaign_id}/preview/pdf returns valid downloadable PDF bytes."""
+    camp = firestore_service.create_campaign({
+        "name": "PDF Proof Campaign",
+        "user_id": auth_user.uid,
+    })
+    camp_id = camp["id"]
+
+    # Upload template
+    tmpl_bytes = _create_sample_template_bytes()
+    res_up = await client.post(
+        f"/api/templates/{camp_id}/upload",
+        files={"file": ("cert_template.jpg", io.BytesIO(tmpl_bytes), "image/jpeg")},
+    )
+    assert res_up.status_code == status.HTTP_200_OK
+
+    # Request PDF proof
+    payload = {
+        "sample_name": "Test Attendee",
+        "sample_variables": {"college": "Test University"},
+        "config": {
+            "fields": [
+                {
+                    "id": "f_name",
+                    "label": "Attendee Name",
+                    "variable_key": "name",
+                    "x_percent": 50.0,
+                    "y_percent": 50.0,
+                    "font_family": "PlayfairDisplay",
+                    "font_size": 48,
+                    "font_color": "#1e293b",
+                    "text_align": "center",
+                    "is_enabled": True,
+                }
+            ]
+        },
+    }
+    res_pdf = await client.post(f"/api/templates/{camp_id}/preview/pdf", json=payload)
+    assert res_pdf.status_code == status.HTTP_200_OK
+    assert res_pdf.headers["content-type"] == "application/pdf"
+    assert res_pdf.content.startswith(b"%PDF")
+
+
+

@@ -163,6 +163,26 @@ export const api = {
   /** Multipart file upload */
   upload: <T>(endpoint: string, formData: FormData) =>
     uploadFile<T>(endpoint, formData),
+
+  /** POST request returning a Blob (for PDF/file downloads) */
+  postBlob: async (endpoint: string, data?: unknown): Promise<Blob> => {
+    const token = await getAuthToken()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    })
+    if (!response.ok) {
+      throw new ApiError(response.status, 'Failed to download binary file')
+    }
+    return response.blob()
+  },
 }
 
 export { API_BASE_URL }

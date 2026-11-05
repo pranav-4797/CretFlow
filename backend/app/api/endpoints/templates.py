@@ -1,7 +1,7 @@
 import base64
 import io
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
 from PIL import Image
 import structlog
 
@@ -186,3 +186,48 @@ async def preview_template(
         sample_name=preview_req.sample_name or "Jane Doe",
         config=preview_req.config,
     )
+
+
+@router.post("/{campaign_id}/preview/pdf", summary="Download sample certificate PDF proof")
+async def preview_certificate_pdf(
+    campaign_id: str,
+    preview_req: TemplatePreviewRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    uid_check = None if current_user.is_admin else current_user.uid
+    campaign = firestore_service.get_campaign(campaign_id, user_id=uid_check)
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found")
+
+    template_data = campaign.get("template") or {}
+    b64_bytes = template_data.get("template_bytes_b64")
+
+    if not b64_bytes:
+        drive_file_id = template_data.get("template_drive_file_id")
+        if drive_file_id:
+            try:
+                raw_bytes = drive_service.download_file(drive_file_id)
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Failed to fetch template from Drive: {str(e)}")
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No certificate template uploaded yet.")
+    else:
+        raw_bytes = base64.b64decode(b64_bytes.encode("ascii"))
+
+    pdf_bytes = certificate_service.generate_pdf_bytes(
+        template_bytes=raw_bytes,
+        participant_name=preview_req.sample_name or "Jane Doe",
+        config=preview_req.config.model_dump(),
+        certificate_id="SAMPLE-PROOF-001",
+        event_name=campaign.get("event_name") or campaign.get("name") or campaign.get("campaign_name"),
+        participant_variables=preview_req.sample_variables,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="certificate_proof_{campaign_id}.pdf"'
+        },
+    )
+
