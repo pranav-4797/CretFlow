@@ -116,6 +116,14 @@ export function CanvaCertificateEditor({
   const [customVariableInput, setCustomVariableInput] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [isSnappingCenter, setIsSnappingCenter] = useState(false)
+  const [naturalWidth, setNaturalWidth] = useState<number>(1600)
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.naturalWidth > 100) {
+      setNaturalWidth(imgRef.current.naturalWidth)
+    }
+  }, [templateImageUrl])
 
   // Dragging state
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -439,16 +447,40 @@ export function CanvaCertificateEditor({
             <div className="flex items-center border rounded-lg overflow-hidden h-8 bg-background">
               <button
                 type="button"
-                onClick={() => updateSelectedField({ font_size: Math.max(12, selectedField.font_size - 4) })}
-                className="px-2 hover:bg-muted text-xs text-muted-foreground"
+                title="Decrease font size"
+                onClick={() => {
+                  const step = selectedField.font_size <= 16 ? 2 : 4
+                  updateSelectedField({ font_size: Math.max(2, selectedField.font_size - step) })
+                }}
+                className="px-2.5 hover:bg-muted text-xs text-muted-foreground font-semibold h-full transition-colors cursor-pointer"
               >
                 -
               </button>
-              <span className="px-2 text-xs font-mono font-medium">{selectedField.font_size}pt</span>
+              <div className="flex items-center px-1">
+                <input
+                  type="number"
+                  min={2}
+                  max={250}
+                  value={selectedField.font_size}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10)
+                    if (!isNaN(val)) {
+                      updateSelectedField({ font_size: Math.max(2, Math.min(250, val)) })
+                    }
+                  }}
+                  className="w-10 text-center text-xs font-mono font-medium bg-transparent border-none focus:outline-hidden py-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  title="Click to type custom font size (down to 2pt)"
+                />
+                <span className="text-[10px] text-muted-foreground font-medium select-none pr-0.5">pt</span>
+              </div>
               <button
                 type="button"
-                onClick={() => updateSelectedField({ font_size: Math.min(160, selectedField.font_size + 4) })}
-                className="px-2 hover:bg-muted text-xs text-muted-foreground"
+                title="Increase font size"
+                onClick={() => {
+                  const step = selectedField.font_size < 16 ? 2 : 4
+                  updateSelectedField({ font_size: Math.min(250, selectedField.font_size + step) })
+                }}
+                className="px-2.5 hover:bg-muted text-xs text-muted-foreground font-semibold h-full transition-colors cursor-pointer"
               >
                 +
               </button>
@@ -598,14 +630,20 @@ export function CanvaCertificateEditor({
               setShowAddMenu(false)
               setShowColorPicker(false)
             }}
-            className="relative w-full rounded-xl border border-border/80 shadow-md overflow-hidden select-none bg-zinc-900 group cursor-default"
-            style={{ touchAction: 'none' }}
+            className="relative w-full rounded-xl border border-border/80 shadow-md overflow-hidden select-none bg-zinc-900 group cursor-default [container-type:inline-size]"
+            style={{ touchAction: 'none', containerType: 'inline-size' }}
           >
             {/* Background Template Image */}
             <img
+              ref={imgRef}
               src={templateImageUrl}
               alt="Certificate Template"
               className="w-full h-auto block pointer-events-none"
+              onLoad={(e) => {
+                if (e.currentTarget.naturalWidth > 100) {
+                  setNaturalWidth(e.currentTarget.naturalWidth)
+                }
+              }}
             />
 
             {/* Vertical Center Guideline (Snaps at 50%) */}
@@ -639,7 +677,7 @@ export function CanvaCertificateEditor({
                           ? 'translate(-100%, -50%)'
                           : 'translate(-50%, -50%)',
                       fontFamily: getCssFontFamily(field.font_family),
-                      fontSize: `clamp(10px, ${(field.font_size / 600) * 100}cqw, 72px)`,
+                      fontSize: `clamp(2px, ${(field.font_size / (naturalWidth > 100 ? naturalWidth : 1600)) * 100}cqw, 140px)`,
                       color: field.font_color,
                       textAlign: field.text_align,
                       whiteSpace: 'nowrap',
@@ -762,6 +800,22 @@ export function CanvaCertificateEditor({
                     step="0.5"
                     value={selectedField.y_percent}
                     onChange={(e) => updateSelectedField({ y_percent: parseFloat(e.target.value) })}
+                    className="w-full h-1 bg-muted rounded appearance-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground">Font Size</span>
+                    <span className="font-mono font-semibold">{selectedField.font_size}pt</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2"
+                    max="140"
+                    step="1"
+                    value={selectedField.font_size}
+                    onChange={(e) => updateSelectedField({ font_size: parseInt(e.target.value, 10) })}
                     className="w-full h-1 bg-muted rounded appearance-none cursor-pointer"
                   />
                 </div>

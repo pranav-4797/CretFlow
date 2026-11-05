@@ -221,3 +221,31 @@ async def test_spreadsheet_custom_column_extraction(client: AsyncClient, auth_us
     camp_doc = firestore_service.get_campaign(camp_id)
     assert "college" in camp_doc.get("available_variables", [])
     assert "rank" in camp_doc.get("available_variables", [])
+
+
+def test_small_font_size_validation_and_rendering():
+    """Verify that small font sizes (e.g. 4pt, 6pt, 8pt) are supported by schema and Pillow."""
+    field = CertificateField(
+        id="f_tiny",
+        label="Small Note",
+        variable_key="name",
+        font_size=4,
+    )
+    assert field.font_size == 4
+
+    config = TemplateConfig(
+        font_size=6,
+        fields=[field],
+    )
+    assert config.font_size == 6
+
+    tmpl_bytes = _create_sample_template_bytes()
+    img = certificate_service.render_certificate_image(
+        template_bytes=tmpl_bytes,
+        participant_name="Tiny Text",
+        config=config.model_dump(),
+    )
+    assert img.size == (1200, 800)
+    img.close()
+
+

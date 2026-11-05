@@ -11,7 +11,7 @@ class CertificateField(BaseModel):
     x_percent: float = Field(50.0, ge=0.0, le=100.0, description="Horizontal center position (0-100%)")
     y_percent: float = Field(50.0, ge=0.0, le=100.0, description="Vertical center position (0-100%)")
     font_family: str = Field("PlayfairDisplay", description="Bundled font family name")
-    font_size: int = Field(48, ge=10, le=200, description="Font size in points")
+    font_size: int = Field(48, ge=2, le=300, description="Font size in points")
     font_color: str = Field("#1e293b", description="Hex font color code")
     text_align: str = Field("center", description="Text alignment: center, left, right")
     is_enabled: bool = Field(True, description="Whether this field is visible and rendered")
@@ -25,7 +25,7 @@ class TemplateConfig(BaseModel):
 
     # Legacy attributes maintained for 100% backwards compatibility with earlier campaigns
     font_family: str = Field("PlayfairDisplay", description="Bundled font family name")
-    font_size: int = Field(64, ge=12, le=200, description="Font size in points")
+    font_size: int = Field(64, ge=2, le=300, description="Font size in points")
     font_color: str = Field("#1e293b", description="Hex font color code")
     name_x_percent: float = Field(50.0, ge=0.0, le=100.0, description="Horizontal center position (0-100%)")
     name_y_percent: float = Field(48.0, ge=0.0, le=100.0, description="Vertical center position (0-100%)")

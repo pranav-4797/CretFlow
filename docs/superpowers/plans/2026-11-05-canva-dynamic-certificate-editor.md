@@ -115,3 +115,4 @@ Organizers currently only have a single position slider for the participant's na
   - Run `pytest backend/tests` to verify 100% test pass.
   - Run `npm run build --prefix frontend` to ensure zero TypeScript errors.
   - Commit and deploy.
+
