@@ -90,43 +90,103 @@ class CertificateService:
         certificate_id: Optional[str] = None,
         event_name: Optional[str] = None,
         date_str: Optional[str] = None,
+        participant_variables: Optional[Dict[str, Any]] = None,
     ) -> Image.Image:
         """
-        Draw participant name and metadata onto template background image.
+        Draw dynamic fields onto template background image.
         Coordinates are percentage-based (0 to 100) for resolution-independent placement.
+        Supports both modern Canva multi-field layouts and legacy single-name layouts.
         """
         # Load template image
         img = Image.open(io.BytesIO(template_bytes)).convert("RGB")
         width, height = img.size
         draw = ImageDraw.Draw(img)
 
-        # 1. Name placement
-        name_x_pct = float(config.get("name_x_percent", 50.0))
-        name_y_pct = float(config.get("name_y_percent", 48.0))
-        font_family = config.get("font_family", DEFAULT_FONT)
-        font_size = int(config.get("font_size", 64))
-        font_color = config.get("font_color", "#1e293b")
-        text_align = config.get("text_align", "center")  # "center", "left", "right"
+        # Prepare variable dictionary
+        now_date = date_str or datetime.now(timezone.utc).strftime("%B %d, %Y")
+        cid_str = certificate_id or "CERT-PREVIEW-001"
+        ev_str = event_name or "Certificate Program"
 
-        rgb_color = _hex_to_rgb(font_color)
-        font = cls.load_font(font_family, font_size)
+        vars_dict: Dict[str, Any] = {
+            "name": participant_name.strip(),
+            "recipient_name": participant_name.strip(),
+            "student_name": participant_name.strip(),
+            "certificate_id": cid_str,
+            "cert_id": cid_str,
+            "date": now_date,
+            "issue_date": now_date,
+            "event_date": now_date,
+            "event_name": ev_str,
+            "event": ev_str,
+            "campaign_name": ev_str,
+        }
+        if participant_variables:
+            for k, v in participant_variables.items():
+                if v is not None and str(v).strip() and str(v).lower() != "nan":
+                    vars_dict[k.lower().strip()] = str(v).strip()
 
-        # Calculate absolute pixel coordinates
-        x_px = int((name_x_pct / 100.0) * width)
-        y_px = int((name_y_pct / 100.0) * height)
-
-        # Anchor mapping for PIL
-        # "mm" = middle horizontal, middle vertical (center)
-        # "lm" = left horizontal, middle vertical
-        # "rm" = right horizontal, middle vertical
         anchor_map = {
             "center": "mm",
             "left": "lm",
             "right": "rm",
         }
+
+        # Check for modern multi-field Canva configuration
+        fields = config.get("fields")
+        if fields and len(fields) > 0:
+            for f in fields:
+                # Handle dictionary or Pydantic model
+                field_data = f if isinstance(f, dict) else f.model_dump()
+                if not field_data.get("is_enabled", True):
+                    continue
+
+                var_key = str(field_data.get("variable_key", "name")).lower().strip()
+                # Resolve value
+                raw_val = vars_dict.get(var_key)
+                if raw_val is None or raw_val == "":
+                    raw_val = field_data.get("sample_value") or field_data.get("label") or f"{{{var_key}}}"
+                text_to_draw = str(raw_val).strip()
+                if not text_to_draw:
+                    continue
+
+                x_pct = float(field_data.get("x_percent", 50.0))
+                y_pct = float(field_data.get("y_percent", 50.0))
+                x_px = int((x_pct / 100.0) * width)
+                y_px = int((y_pct / 100.0) * height)
+
+                f_family = field_data.get("font_family", DEFAULT_FONT)
+                f_size = int(field_data.get("font_size", 48))
+                f_color = field_data.get("font_color", "#1e293b")
+                f_align = field_data.get("text_align", "center")
+
+                font = cls.load_font(f_family, f_size)
+                rgb_color = _hex_to_rgb(f_color)
+                anchor = anchor_map.get(f_align, "mm")
+
+                draw.text(
+                    (x_px, y_px),
+                    text_to_draw,
+                    fill=rgb_color,
+                    font=font,
+                    anchor=anchor,
+                )
+            return img
+
+        # Fallback: Legacy single-name layout
+        name_x_pct = float(config.get("name_x_percent", 50.0))
+        name_y_pct = float(config.get("name_y_percent", 48.0))
+        font_family = config.get("font_family", DEFAULT_FONT)
+        font_size = int(config.get("font_size", 64))
+        font_color = config.get("font_color", "#1e293b")
+        text_align = config.get("text_align", "center")
+
+        rgb_color = _hex_to_rgb(font_color)
+        font = cls.load_font(font_family, font_size)
+
+        x_px = int((name_x_pct / 100.0) * width)
+        y_px = int((name_y_pct / 100.0) * height)
         anchor = anchor_map.get(text_align, "mm")
 
-        # Draw participant name
         draw.text(
             (x_px, y_px),
             participant_name.strip(),
@@ -135,7 +195,7 @@ class CertificateService:
             anchor=anchor,
         )
 
-        # 2. Optional Certificate ID placement
+        # Optional Certificate ID placement
         if config.get("show_cert_id", True) and certificate_id:
             cid_x_pct = float(config.get("cert_id_x_percent", 88.0))
             cid_y_pct = float(config.get("cert_id_y_percent", 92.0))
@@ -150,7 +210,7 @@ class CertificateService:
                 anchor="mm",
             )
 
-        # 3. Optional Date placement
+        # Optional Date placement
         if config.get("show_date", False):
             display_date = date_str or datetime.now(timezone.utc).strftime("%B %d, %Y")
             date_x_pct = float(config.get("date_x_percent", 15.0))
@@ -177,6 +237,7 @@ class CertificateService:
         certificate_id: Optional[str] = None,
         event_name: Optional[str] = None,
         date_str: Optional[str] = None,
+        participant_variables: Optional[Dict[str, Any]] = None,
     ) -> bytes:
         """Generate high-resolution PDF bytes for a single participant and cleanly free image memory."""
         img = cls.render_certificate_image(
@@ -186,6 +247,7 @@ class CertificateService:
             certificate_id=certificate_id,
             event_name=event_name,
             date_str=date_str,
+            participant_variables=participant_variables,
         )
         pdf_buffer = io.BytesIO()
         try:
@@ -202,6 +264,9 @@ class CertificateService:
         participant_name: str,
         config: Dict[str, Any],
         certificate_id: Optional[str] = "CERT-PREVIEW-001",
+        event_name: Optional[str] = None,
+        date_str: Optional[str] = None,
+        participant_variables: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Render PNG preview and return as base64 data URI for instant web display."""
         img = cls.render_certificate_image(
@@ -209,6 +274,9 @@ class CertificateService:
             participant_name=participant_name,
             config=config,
             certificate_id=certificate_id,
+            event_name=event_name,
+            date_str=date_str,
+            participant_variables=participant_variables,
         )
         try:
             # Create web-friendly resized preview (max 1200px width for fast rendering)

@@ -167,6 +167,15 @@ async def upload_participants(
 
         clean_name = "".join(c for c in raw_name if ord(c) >= 32)[:150]
 
+        # Extract any custom spreadsheet columns (e.g. college, rank, department, roll_no)
+        row_vars: Dict[str, Any] = {}
+        for col in df.columns:
+            if col not in (email_col, name_col):
+                val = str(row.get(col, "")).strip()
+                if val and val.lower() != "nan":
+                    clean_val = "".join(c for c in val if ord(c) >= 32)[:200]
+                    row_vars[col] = clean_val
+
         p_id = f"p_{uuid.uuid4().hex[:12]}"
         part_data = {
             "participant_id": p_id,
@@ -175,12 +184,20 @@ async def upload_participants(
             "email_status": "queued",
             "attempt_count": 0,
             "certificate_id": f"CERT-{p_id[2:10].upper()}",
+            "variables": row_vars,
         }
         firestore_service.save_participant(campaign_id, part_data)
         existing_map[clean_email] = {"participant_id": p_id, "email_status": "queued", "recipient_name": clean_name}
         imported += 1
 
     summary = firestore_service.recalculate_and_sync_campaign_counters(campaign_id)
+
+    # Track discovered custom columns in campaign doc for frontend Canva variable palette
+    custom_cols = [c for c in df.columns if c not in (email_col, name_col)]
+    if custom_cols:
+        existing_cols = list(camp.get("available_variables") or [])
+        merged_cols = list(dict.fromkeys(existing_cols + custom_cols))
+        firestore_service.update_campaign(campaign_id, {"available_variables": merged_cols})
 
     # If campaign was previously completed and we imported new participants, transition to ready
     if imported > 0 and camp.get("status") == "completed":

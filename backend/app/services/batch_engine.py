@@ -377,12 +377,14 @@ class BatchProcessingEngine:
                     import base64
                     from app.services.certificate_service import certificate_service
                     t_bytes = base64.b64decode(t_b64.encode("ascii"))
+                    part_vars = dict(participant.get("variables") or {})
                     pdf_bytes = certificate_service.generate_pdf_bytes(
                         template_bytes=t_bytes,
                         participant_name=recipient_name,
                         config=t_config,
                         certificate_id=participant.get("certificate_id") or f"CERT-{participant_id[:8].upper()}",
                         event_name=campaign.get("event_name") or campaign_name,
+                        participant_variables=part_vars,
                     )
                     log.info("Auto-generated certificate PDF on the fly for participant", participant_id=participant_id)
                 except Exception as ex:

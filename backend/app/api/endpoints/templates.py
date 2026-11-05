@@ -175,12 +175,14 @@ async def preview_template(
 
     preview_url = certificate_service.generate_preview_base64(
         template_bytes=raw_bytes,
-        participant_name=preview_req.sample_name,
+        participant_name=preview_req.sample_name or "Jane Doe",
         config=preview_req.config.model_dump(),
+        event_name=campaign.get("event_name") or campaign.get("name") or campaign.get("campaign_name"),
+        participant_variables=preview_req.sample_variables,
     )
 
     return TemplatePreviewResponse(
         preview_data_url=preview_url,
-        sample_name=preview_req.sample_name,
+        sample_name=preview_req.sample_name or "Jane Doe",
         config=preview_req.config,
     )

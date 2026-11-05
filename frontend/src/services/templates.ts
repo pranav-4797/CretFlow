@@ -1,18 +1,33 @@
 import { api } from '@/services/api'
 
-export interface TemplateConfig {
+export interface CertificateField {
+  id: string
+  label: string
+  variable_key: string
+  x_percent: number
+  y_percent: number
   font_family: string
   font_size: number
   font_color: string
-  name_x_percent: number
-  name_y_percent: number
   text_align: 'center' | 'left' | 'right'
-  show_cert_id: boolean
-  cert_id_x_percent: number
-  cert_id_y_percent: number
-  show_date: boolean
-  date_x_percent: number
-  date_y_percent: number
+  is_enabled: boolean
+  sample_value?: string
+}
+
+export interface TemplateConfig {
+  fields?: CertificateField[]
+  font_family?: string
+  font_size?: number
+  font_color?: string
+  name_x_percent?: number
+  name_y_percent?: number
+  text_align?: 'center' | 'left' | 'right'
+  show_cert_id?: boolean
+  cert_id_x_percent?: number
+  cert_id_y_percent?: number
+  show_date?: boolean
+  date_x_percent?: number
+  date_y_percent?: number
 }
 
 export interface TemplateResponse {
@@ -65,9 +80,15 @@ export const templateService = {
     ),
 
   /** Generate live sample preview */
-  previewTemplate: (campaignId: string, sampleName: string, config: TemplateConfig) =>
+  previewTemplate: (
+    campaignId: string,
+    sampleName: string,
+    config: TemplateConfig,
+    sampleVariables?: Record<string, any>
+  ) =>
     api.post<TemplatePreviewResponse>(`/api/templates/${campaignId}/preview`, {
       sample_name: sampleName,
+      sample_variables: sampleVariables || {},
       config,
     }),
 
